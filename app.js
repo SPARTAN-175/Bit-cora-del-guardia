@@ -6,6 +6,7 @@ let currentArea=localStorage.getItem(AREA_KEY)||"Urgencias";
 let guardName=localStorage.getItem(GUARD_KEY)||"";
 let selectedDate=new Date().toLocaleDateString("en-CA");
 let deferredInstall=null;
+let pendingQuickType=null;
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
@@ -18,12 +19,18 @@ function toast(t){const x=$("#toast");x.textContent=t;x.classList.add("show");se
 function updateClock(){ $("#clock").textContent=fmt(new Date()) }
 setInterval(updateClock,1000);updateClock();
 
-function setArea(){currentArea=localStorage.getItem(AREA_KEY)||"Urgencias";$("#currentArea").textContent=currentArea}
+function setArea(){
+ currentArea=localStorage.getItem(AREA_KEY)||"Urgencias";
+ $("#currentArea").textContent=currentArea; $("#drawerAreaName").textContent=currentArea;
+}
 setArea();
 
 function setGuard(){
-  guardName=localStorage.getItem(GUARD_KEY)||"";
-  $("#guardDisplay").textContent=`👮 Guardia: ${guardName||"Sin configurar"}`;
+ guardName=localStorage.getItem(GUARD_KEY)||"";
+ const shown=guardName||"Sin configurar";
+ $("#guardDisplay").textContent=`👮 ${shown}`;
+ $("#statusGuard").textContent=`👮 ${shown}`;
+ $("#drawerGuardName").textContent=shown;
 }
 setGuard();
 
@@ -104,10 +111,15 @@ function openForm(type){
 }
 
 function closeModal(){$("#modal").classList.add("hidden");$("#modal").setAttribute("aria-hidden","true")}
-document.querySelectorAll(".quick-card").forEach(b=>b.onclick=()=>openForm(b.dataset.type));
+document.querySelectorAll(".quick-card").forEach(b=>b.onclick=()=>{
+ if(!guardName){pendingQuickType=b.dataset.type;$("#guardNameInput").value="";$("#guardModal").classList.remove("hidden");$("#guardNameInput").focus();return;}
+ openForm(b.dataset.type);
+});
 $("#closeModal").onclick=closeModal;
 $("#recordForm").onsubmit=async e=>{
- e.preventDefault();const type=e.currentTarget.dataset.type,cfg=forms[type];
+ e.preventDefault();
+ if(!guardName){pendingQuickType=e.currentTarget.dataset.type;closeModal();openGuardModal();return}
+ const type=e.currentTarget.dataset.type,cfg=forms[type];
  const data={};
  for(const [id, , fieldType] of cfg.fields){
    const el=document.querySelector("#f_"+id);
@@ -171,23 +183,22 @@ personal1:"Personal de salud 1",personal1Cargo:"Cargo personal 1",personal2:"Per
  lines.push(`━━━━━━━━━━━━━━━━━━`);
  return lines.join("\n");
 }
+async function makeShareImage(r){
+ const photos=photoData(r); if(!photos.length)return null;
+ const imgs=await Promise.all(photos.map(p=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=p.data;})));
+ const maxW=900,gap=12, sizes=imgs.map(i=>{const z=Math.min(1,maxW/i.width);return{w:Math.round(i.width*z),h:Math.round(i.height*z)}}),w=Math.max(...sizes.map(x=>x.w)),h=sizes.reduce((a,x)=>a+x.h,0)+gap*(sizes.length-1);
+ const c=document.createElement("canvas");c.width=w;c.height=h;const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);let y=0;
+ imgs.forEach((img,i)=>{const z=sizes[i],x=Math.round((w-z.w)/2);ctx.drawImage(img,x,y,z.w,z.h);y+=z.h+gap});
+ return new Promise(resolve=>c.toBlob(resolve,"image/jpeg",.65));
+}
 async function share(r){
- const text=shareText(r), photos=photoData(r);
- if(navigator.share){
-   try{
-     if(photos.length && navigator.canShare){
-       const files=[];
-       for(let i=0;i<photos.length;i++){
-         const blob=await (await fetch(photos[i].data)).blob();
-         files.push(new File([blob],`bitacora_${r.id}_${i+1}.jpg`,{type:"image/jpeg"}));
-       }
-       if(navigator.canShare({files})) { await navigator.share({title:"Bitácora de guardia",text,files}); return; }
-     }
-     await navigator.share({title:"Bitácora de guardia",text});return;
-   }catch(e){}
- }
- await navigator.clipboard?.writeText(text);
- toast(photos.length?"Texto copiado. El navegador no permite adjuntar la foto automáticamente.":"Texto copiado. Puedes pegarlo en WhatsApp.");
+ const text=shareText(r),photos=photoData(r);
+ if(navigator.share){try{
+   if(photos.length&&navigator.canShare){const blob=await makeShareImage(r);if(blob){const file=new File([blob],`bitacora_${r.id}.jpg`,{type:"image/jpeg"});if(navigator.canShare({files:[file]})){await navigator.share({title:"Bitácora de guardia",text,files:[file]});return;}}}
+   await navigator.share({title:"Bitácora de guardia",text});return;
+ }catch(e){if(e?.name==="AbortError")return;}}
+ try{await navigator.clipboard?.writeText(text)}catch(_){}
+ toast(photos.length?"Texto copiado. La foto permanece guardada en el registro.":"Texto copiado. Puedes pegarlo en WhatsApp.");
 }
 function deleteRecord(id){if(confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")){records=records.filter(r=>r.id!==id);save();toast("Registro eliminado")}}
 function render(){
@@ -229,15 +240,16 @@ $("#historyBtn").onclick=()=>{
   const chosen=prompt("Días con registros:\n\n"+days.map((d,i)=>`${i+1}. ${d} (${records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===d).length})`).join("\n")+"\n\nEscribe la fecha (AAAA-MM-DD):",selectedDate);
   if(chosen && /^\d{4}-\d{2}-\d{2}$/.test(chosen)){selectedDate=chosen;$("#dateFilter").value=chosen;$("#searchInput").value="";render()}
 };
-$("#shareAllBtn").onclick=async()=>{
+async function shareCurrentDay(){
  const date=$("#dateFilter")?.value||selectedDate;
  const dayRecords=records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===date);
  if(!dayRecords.length)return toast("No hay registros para compartir de este día");
  const guards=[...new Set(dayRecords.map(r=>r.guard||"Sin configurar"))];
  const text=["🏥 BITÁCORA DE GUARDIA",`📅 Día: ${date}`,`👮 Guardia(s): ${guards.join(", ")}`,`📍 Registros: ${dayRecords.length}`,"━━━━━━━━━━━━━━━━━━",...dayRecords.slice().reverse().map(shareText)].join("\n\n");
- if(navigator.share){try{await navigator.share({title:"Bitácora de guardia",text});return}catch(e){}}
- await navigator.clipboard?.writeText(text);toast("Bitácora copiada. Puedes pegarla en WhatsApp.");
-};
+ if(navigator.share){try{await navigator.share({title:`Bitácora ${date}`,text});return}catch(e){if(e?.name==="AbortError")return}}
+ try{await navigator.clipboard?.writeText(text)}catch(_){}
+ toast("Reporte del día copiado. Puedes pegarlo en WhatsApp.");
+}
 $("#changeAreaBtn").onclick=()=>{$("#areaInput").value=currentArea;$("#areaModal").classList.remove("hidden")};
 $("#guardBtn").onclick=()=>{$("#guardNameInput").value=guardName;$("#guardModal").classList.remove("hidden");$("#guardNameInput").focus()};
 $("#closeGuardModal").onclick=()=>$("#guardModal").classList.add("hidden");
@@ -245,6 +257,7 @@ $("#saveGuardBtn").onclick=()=>{
  const n=$("#guardNameInput").value.trim();
  if(!n)return toast("Escribe el nombre del guardia");
  guardName=n;localStorage.setItem(GUARD_KEY,n);setGuard();$("#guardModal").classList.add("hidden");toast("Guardia configurado");
+ if(pendingQuickType){const t=pendingQuickType;pendingQuickType=null;setTimeout(()=>openForm(t),120)}
 };
 
 $("#closeAreaModal").onclick=()=>$("#areaModal").classList.add("hidden");

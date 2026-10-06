@@ -35,3 +35,6 @@ v0.3.0: La pantalla principal muestra únicamente los registros del día selecci
 
 
 v0.3.1: Se agregó identidad configurable del guardia. El nombre del guardia se guarda localmente y se captura como una instantánea en cada nuevo registro, junto con el área. Cambiar de área no cambia el guardia. Si un día hay distintos guardias usando el mismo dispositivo, los registros conservan quién estaba configurado al momento de crearlos.
+
+
+v0.3.2: Interfaz compacta y rápida; configuración, historial y compartir están en menú lateral. Placeholder genérico para nombre del guardia. Compartir fotografías usa una sola imagen comprimida (si hay varias, se combinan) para reducir problemas de WhatsApp y memoria.

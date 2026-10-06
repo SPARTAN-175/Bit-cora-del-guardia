@@ -11,25 +11,27 @@
 </head>
 <body>
 <header class="topbar">
-  <div>
-    <h1>🏥 Bitácora de Guardia</h1>
-    <p id="clock">--/--/---- --:--</p>
-    <p id="guardDisplay">👮 Guardia: Sin configurar</p>
-  </div>
-  <button id="installBtn" class="icon-btn hidden" title="Instalar">⬇️</button>
+  <div class="brand"><div class="brand-icon">🏥</div><div><h1>Bitácora de Guardia</h1><p id="clock">--/--/---- --:--</p></div></div>
+  <div class="top-actions"><span id="guardDisplay" class="guard-chip">👮 Sin configurar</span><button id="menuBtn" class="menu-btn">☰</button><button id="installBtn" class="icon-btn hidden">⬇️</button></div>
 </header>
+<div id="drawerBackdrop" class="drawer-backdrop hidden"></div>
+<aside id="drawer" class="drawer" aria-hidden="true">
+  <div class="drawer-head"><div><span class="eyebrow">BITÁCORA</span><h2>Menú</h2></div><button id="closeDrawer" class="close">×</button></div>
+  <div class="drawer-profile"><div class="drawer-avatar">👮</div><div><strong id="drawerGuardName">Sin configurar</strong><small id="drawerAreaName">Urgencias</small></div></div>
+  <button class="drawer-item" id="drawerGuard">👮 <span>Configurar guardia</span></button>
+  <button class="drawer-item" id="drawerArea">📍 <span>Cambiar área</span></button>
+  <div class="drawer-separator"></div>
+  <button class="drawer-item" id="drawerToday">📅 <span>Registros de hoy</span></button>
+  <button class="drawer-item" id="drawerHistory">🗂️ <span>Historial por día</span></button>
+  <button class="drawer-item" id="drawerShare">📤 <span>Compartir guardia</span></button>
+  <div class="drawer-separator"></div><p class="drawer-note">Todo se guarda localmente en este dispositivo.</p>
+</aside>
 
 <main>
-  <section class="panel area-panel">
-    <div>
-      <span class="eyebrow">ÁREA ACTUAL</span>
-      <h2 id="currentArea">Urgencias</h2>
-    </div>
-    <div class="area-actions">
-      <button id="changeAreaBtn" class="secondary">Cambiar área</button>
-      <button id="guardBtn" class="secondary">👮 Configurar guardia</button>
-    </div>
-  </section>
+  <section class="panel status-panel">
+  <div class="status-main"><span class="eyebrow">GUARDIA ACTUAL</span><h2 id="currentArea">Urgencias</h2><p id="statusGuard">👮 Sin configurar</p></div>
+  <button id="quickAreaBtn" class="secondary compact-btn">📍 Área</button>
+</section>
 
   <section class="quick-grid">
     <button class="quick-card" data-type="paciente">👤<strong>Paciente</strong><small>Ingreso / atención</small></button>
@@ -48,16 +50,11 @@
       </div>
       <span id="countBadge" class="badge">0</span>
     </div>
-    <div class="toolbar">
-      <input id="searchInput" type="search" placeholder="Buscar en registros…">
-      <button id="shareAllBtn" class="secondary">📤 Compartir guardia</button>
-    </div>
-    <div class="history-bar">
-      <label>📅 Día consultado
-        <input id="dateFilter" type="date">
-      </label>
-      <button id="todayBtn" class="secondary">Hoy</button>
-      <button id="historyBtn" class="secondary">🗂️ Historial</button>
+    <div class="toolbar"><input id="searchInput" type="search" placeholder="Buscar en los registros…"></div>
+    <div class="day-strip">
+      <button id="prevDayBtn" class="day-nav">‹</button>
+      <label><span>REGISTROS DEL DÍA</span><input id="dateFilter" type="date"></label>
+      <button id="nextDayBtn" class="day-nav">›</button>
     </div>
     <div id="records" class="records"></div>
     <div id="emptyState" class="empty">
@@ -115,7 +112,7 @@
     </div>
     <p class="muted">Este nombre aparecerá en los nuevos registros y en los reportes compartidos. Puedes cambiar de área sin perder la identidad del guardia.</p>
     <label>Nombre del guardia
-      <input id="guardNameInput" type="text" autocomplete="name" placeholder="Ej. Carlos Arturo Hernández">
+      <input id="guardNameInput" type="text" autocomplete="name" placeholder="Nombre completo del guardia">
     </label>
     <button id="saveGuardBtn" class="primary full">Guardar guardia</button>
   </div>
