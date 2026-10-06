@@ -41,3 +41,6 @@ v0.3.2: Interfaz compacta y rápida; configuración, historial y compartir está
 
 
 v0.3.3: Corrección del error de consola causado por referencias a botones eliminados al cambiar a la interfaz con menú lateral. Se eliminaron listeners obsoletos y se restauraron los controles actuales del menú, área, guardia, historial y navegación por día. También se incrementó la caché del Service Worker.
+
+
+v0.3.4: CORRECCIÓN CRÍTICA DE COMPARTIR. Los Data URL/Base64 de las fotografías ya nunca se incluyen en el texto del reporte. Una fotografía se comparte como archivo de imagen normal; si hay varias, se combinan en un único archivo para reducir problemas de WhatsApp. El texto enviado queda completamente limpio y legible.

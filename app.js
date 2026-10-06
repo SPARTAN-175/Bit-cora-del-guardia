@@ -161,44 +161,112 @@ function photoData(r){
 }
 function shareText(r){
  const d=r.data, lines=[
- `🏥 BITÁCORA DE GUARDIA`,
- `━━━━━━━━━━━━━━━━━━`,
- `📌 ${typeName(r.type)}`,
- `📍 Área: ${r.area}`,
- `👮 Guardia: ${r.guard||"Sin configurar"}`,
- `📅 Fecha y hora: ${fmt(r.createdAt)}`
+  `🏥 BITÁCORA DE GUARDIA`,
+  `━━━━━━━━━━━━━━━━━━`,
+  `📌 ${typeName(r.type)}`,
+  `📍 Área: ${r.area}`,
+  `👮 Guardia: ${r.guard||"Sin configurar"}`,
+  `📅 Fecha y hora: ${fmt(r.createdAt)}`
  ];
- const labels={destino:"Destino del traslado",ambulancia:"Ambulancia",placaAmb:"Placa de ambulancia",choferAmb:"Conductor",
-kmSalida:"Kilometraje de salida",combustible:"Nivel de combustible",nombre:"Paciente",sexo:"Sexo",edad:"Edad",procedencia:"Procedencia",acompanante:"Acompañante",
- acompananteSexo:"Sexo del acompañante",acompananteEdad:"Edad del acompañante",idPaciente:"Identificación del paciente",
- responsable:"Familiar / responsable",responsableSexo:"Sexo del responsable",
-acompanante1:"Familiar acompañante 1",acompanante1Sexo:"Sexo acompañante 1",acompanante1Edad:"Edad acompañante 1",acompanante1Id:"Identificación acompañante 1",
-acompanante2:"Familiar acompañante 2",acompanante2Sexo:"Sexo acompañante 2",acompanante2Edad:"Edad acompañante 2",acompanante2Id:"Identificación acompañante 2",
-personal1:"Personal de salud 1",personal1Cargo:"Cargo personal 1",personal2:"Personal de salud 2",personal2Cargo:"Cargo personal 2",responsableEdad:"Edad del responsable",
- idResponsable:"Identificación del responsable",tipoVehiculo:"Tipo de vehículo",placa:"Placa",color:"Color",
- marcaModelo:"Marca / modelo",chofer:"Chófer",origen:"Procedencia",motivo:"Motivo de ingreso",persona:"Persona",
- tipoMovimiento:"Movimiento",acompanado:"A quién visita / acompaña",horaRelacionada:"Hora relacionada",
- pertenencias:"Objetos / pertenencias",titulo:"Asunto",nota:"Nota",observaciones:"Observaciones"};
- Object.entries(d).forEach(([k,v])=>{if(v)lines.push(`• ${labels[k]||k}: ${v}`)});
+ const labels={
+  destino:"Destino del traslado",ambulancia:"Ambulancia",placaAmb:"Placa de ambulancia",choferAmb:"Conductor",
+  kmSalida:"Kilometraje de salida",combustible:"Nivel de combustible",
+  nombre:"Paciente",sexo:"Sexo",edad:"Edad",procedencia:"Procedencia",acompanante:"Acompañante",
+  acompananteSexo:"Sexo del acompañante",acompananteEdad:"Edad del acompañante",idPaciente:"Identificación del paciente",
+  responsable:"Familiar / responsable",responsableSexo:"Sexo del responsable",responsableEdad:"Edad del responsable",
+  idResponsable:"Identificación del responsable",
+  acompanante1:"Familiar acompañante 1",acompanante1Sexo:"Sexo acompañante 1",acompanante1Edad:"Edad acompañante 1",acompanante1Id:"Identificación acompañante 1",
+  acompanante2:"Familiar acompañante 2",acompanante2Sexo:"Sexo acompañante 2",acompanante2Edad:"Edad acompañante 2",acompanante2Id:"Identificación acompañante 2",
+  personal1:"Personal de salud 1",personal1Cargo:"Cargo personal 1",personal2:"Personal de salud 2",personal2Cargo:"Cargo personal 2",
+  tipoVehiculo:"Tipo de vehículo",placa:"Placa",color:"Color",marcaModelo:"Marca / modelo",chofer:"Chófer",
+  origen:"Procedencia",motivo:"Motivo de ingreso",persona:"Persona",tipoMovimiento:"Movimiento",
+  acompanhado:"A quién visita / acompaña",acompanado:"A quién visita / acompaña",horaRelacionada:"Hora relacionada",
+  pertenencias:"Objetos / pertenencias",titulo:"Asunto",nota:"Nota",observaciones:"Observaciones"
+ };
+
+ // IMPORTANTÍSIMO: los campos de fotografía se guardan como Data URL,
+ // pero JAMÁS se incluyen en el texto del reporte.
+ Object.entries(d).forEach(([k,v])=>{
+   if(!v)return;
+   if(k.toLowerCase().includes("foto"))return;
+   if(typeof v==="string" && v.startsWith("data:image/"))return;
+   lines.push(`• ${labels[k]||k}: ${v}`);
+ });
  lines.push(`━━━━━━━━━━━━━━━━━━`);
  return lines.join("\n");
 }
 async function makeShareImage(r){
- const photos=photoData(r); if(!photos.length)return null;
- const imgs=await Promise.all(photos.map(p=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=p.data;})));
- const maxW=900,gap=12, sizes=imgs.map(i=>{const z=Math.min(1,maxW/i.width);return{w:Math.round(i.width*z),h:Math.round(i.height*z)}}),w=Math.max(...sizes.map(x=>x.w)),h=sizes.reduce((a,x)=>a+x.h,0)+gap*(sizes.length-1);
- const c=document.createElement("canvas");c.width=w;c.height=h;const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);let y=0;
- imgs.forEach((img,i)=>{const z=sizes[i],x=Math.round((w-z.w)/2);ctx.drawImage(img,x,y,z.w,z.h);y+=z.h+gap});
- return new Promise(resolve=>c.toBlob(resolve,"image/jpeg",.65));
+ const photos=photoData(r);
+ if(!photos.length)return null;
+
+ // Una sola foto: conservarla como fotografía normal, sin volver a dibujarla.
+ if(photos.length===1){
+   const response=await fetch(photos[0].data);
+   return await response.blob();
+ }
+
+ // Varias fotos: unirlas en una sola imagen para que Android/WhatsApp
+ // reciba un único archivo y evitar bloqueos por múltiples adjuntos.
+ const imgs=await Promise.all(photos.map(p=>new Promise((resolve,reject)=>{
+   const img=new Image();
+   img.onload=()=>resolve(img);
+   img.onerror=reject;
+   img.src=p.data;
+ })));
+
+ const maxW=1000,gap=12;
+ const sizes=imgs.map(img=>{
+   const scale=Math.min(1,maxW/img.width);
+   return {w:Math.round(img.width*scale),h:Math.round(img.height*scale)};
+ });
+ const width=Math.max(...sizes.map(x=>x.w));
+ const height=sizes.reduce((sum,x)=>sum+x.h,0)+gap*(sizes.length-1);
+ const canvas=document.createElement("canvas");
+ canvas.width=width;canvas.height=height;
+ const ctx=canvas.getContext("2d");
+ ctx.fillStyle="#fff";ctx.fillRect(0,0,width,height);
+ let y=0;
+ imgs.forEach((img,i)=>{
+   const z=sizes[i],x=Math.round((width-z.w)/2);
+   ctx.drawImage(img,x,y,z.w,z.h);
+   y+=z.h+gap;
+ });
+ return new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.78));
 }
 async function share(r){
- const text=shareText(r),photos=photoData(r);
- if(navigator.share){try{
-   if(photos.length&&navigator.canShare){const blob=await makeShareImage(r);if(blob){const file=new File([blob],`bitacora_${r.id}.jpg`,{type:"image/jpeg"});if(navigator.canShare({files:[file]})){await navigator.share({title:"Bitácora de guardia",text,files:[file]});return;}}}
-   await navigator.share({title:"Bitácora de guardia",text});return;
- }catch(e){if(e?.name==="AbortError")return;}}
+ const text=shareText(r);
+ const photos=photoData(r);
+
+ if(navigator.share){
+   try{
+     if(photos.length && navigator.canShare){
+       const blob=await makeShareImage(r);
+       if(blob){
+         const extension=blob.type==="image/png"?"png":"jpg";
+         const file=new File([blob],`bitacora_${r.id}.${extension}`,{type:blob.type||"image/jpeg"});
+         if(navigator.canShare({files:[file]})){
+           await navigator.share({
+             title:"Bitácora de guardia",
+             text:text,
+             files:[file]
+           });
+           return;
+         }
+       }
+     }
+
+     // Si el dispositivo no permite adjuntar archivos, compartir solamente texto.
+     await navigator.share({title:"Bitácora de guardia",text:text});
+     return;
+   }catch(e){
+     if(e?.name==="AbortError")return;
+   }
+ }
+
  try{await navigator.clipboard?.writeText(text)}catch(_){}
- toast(photos.length?"Texto copiado. La foto permanece guardada en el registro.":"Texto copiado. Puedes pegarlo en WhatsApp.");
+ toast(photos.length
+   ?"Texto copiado. Este navegador no permite adjuntar la foto desde aquí."
+   :"Texto copiado. Puedes pegarlo en WhatsApp.");
 }
 function deleteRecord(id){if(confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")){records=records.filter(r=>r.id!==id);save();toast("Registro eliminado")}}
 function render(){
