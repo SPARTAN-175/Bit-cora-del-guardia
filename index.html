@@ -14,6 +14,7 @@
   <div>
     <h1>🏥 Bitácora de Guardia</h1>
     <p id="clock">--/--/---- --:--</p>
+    <p id="guardDisplay">👮 Guardia: Sin configurar</p>
   </div>
   <button id="installBtn" class="icon-btn hidden" title="Instalar">⬇️</button>
 </header>
@@ -24,7 +25,10 @@
       <span class="eyebrow">ÁREA ACTUAL</span>
       <h2 id="currentArea">Urgencias</h2>
     </div>
-    <button id="changeAreaBtn" class="secondary">Cambiar área</button>
+    <div class="area-actions">
+      <button id="changeAreaBtn" class="secondary">Cambiar área</button>
+      <button id="guardBtn" class="secondary">👮 Configurar guardia</button>
+    </div>
   </section>
 
   <section class="quick-grid">
@@ -47,6 +51,13 @@
     <div class="toolbar">
       <input id="searchInput" type="search" placeholder="Buscar en registros…">
       <button id="shareAllBtn" class="secondary">📤 Compartir guardia</button>
+    </div>
+    <div class="history-bar">
+      <label>📅 Día consultado
+        <input id="dateFilter" type="date">
+      </label>
+      <button id="todayBtn" class="secondary">Hoy</button>
+      <button id="historyBtn" class="secondary">🗂️ Historial</button>
     </div>
     <div id="records" class="records"></div>
     <div id="emptyState" class="empty">
@@ -90,6 +101,23 @@
       <option>Otro</option>
     </datalist>
     <button id="saveAreaBtn" class="primary full">Guardar área</button>
+  </div>
+</div>
+
+<div id="guardModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card small">
+    <div class="modal-head">
+      <div>
+        <span class="eyebrow">IDENTIFICACIÓN</span>
+        <h2>Guardia responsable</h2>
+      </div>
+      <button id="closeGuardModal" class="close">×</button>
+    </div>
+    <p class="muted">Este nombre aparecerá en los nuevos registros y en los reportes compartidos. Puedes cambiar de área sin perder la identidad del guardia.</p>
+    <label>Nombre del guardia
+      <input id="guardNameInput" type="text" autocomplete="name" placeholder="Ej. Carlos Arturo Hernández">
+    </label>
+    <button id="saveGuardBtn" class="primary full">Guardar guardia</button>
   </div>
 </div>
 

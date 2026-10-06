@@ -1,7 +1,10 @@
 const KEY="bitacora_guardia_v1";
 const AREA_KEY="bitacora_area_v1";
+const GUARD_KEY="bitacora_guard_name_v1";
 let records=JSON.parse(localStorage.getItem(KEY)||"[]");
 let currentArea=localStorage.getItem(AREA_KEY)||"Urgencias";
+let guardName=localStorage.getItem(GUARD_KEY)||"";
+let selectedDate=new Date().toLocaleDateString("en-CA");
 let deferredInstall=null;
 
 const $=s=>document.querySelector(s);
@@ -18,6 +21,12 @@ setInterval(updateClock,1000);updateClock();
 function setArea(){currentArea=localStorage.getItem(AREA_KEY)||"Urgencias";$("#currentArea").textContent=currentArea}
 setArea();
 
+function setGuard(){
+  guardName=localStorage.getItem(GUARD_KEY)||"";
+  $("#guardDisplay").textContent=`👮 Guardia: ${guardName||"Sin configurar"}`;
+}
+setGuard();
+
 const forms={
 paciente:{
  title:"Ingreso / registro de paciente", fields:[
@@ -25,7 +34,8 @@ paciente:{
  ["edad","Edad","number",true],["procedencia","Procedencia","text",false],["acompanante","Acompañante","text",false],
  ["acompananteSexo","Sexo del acompañante","select",false,["Femenino","Masculino","Otro / no especificado"]],
  ["acompananteEdad","Edad del acompañante","number",false],["idPaciente","Identificación del paciente","text",false],
- ["observaciones","Observaciones / incidencia","textarea",false]
+ ["observaciones","Observaciones / incidencia","textarea",false],
+ ["foto","📷 Foto / evidencia","photo",false]
 ]},
 internamiento:{
  title:"Internamiento", fields:[
@@ -33,14 +43,16 @@ internamiento:{
  ["edad","Edad","number",true],["procedencia","Procedencia","text",false],["responsable","Familiar / responsable a cargo","text",true],
  ["responsableSexo","Sexo del responsable","select",false,["Femenino","Masculino","Otro / no especificado"]],
  ["responsableEdad","Edad del responsable","number",false],["idPaciente","Identificación del paciente","text",false],
- ["idResponsable","Identificación del responsable","text",true],["observaciones","Observaciones","textarea",false]
+ ["idResponsable","Identificación del responsable","text",true],["observaciones","Observaciones","textarea",false],
+ ["foto","📷 Foto / evidencia","photo",false]
 ]},
 vehiculo:{
  title:"Registro de vehículo", fields:[
  ["tipoVehiculo","Tipo de vehículo","select",true,["Automóvil","Camioneta","Motocicleta","Ambulancia","Taxi","Camión","Otro"]],
  ["placa","Placa","text",true],["color","Color","text",false],["marcaModelo","Marca / modelo","text",false],
  ["chofer","Nombre del chófer","text",false],["origen","Procedencia / de dónde viene","text",false],
- ["motivo","Motivo de ingreso","text",false],["observaciones","Observaciones","textarea",false]
+ ["motivo","Motivo de ingreso","text",false],["observaciones","Observaciones","textarea",false],
+ ["foto","📷 Foto / evidencia","photo",false]
 ]},
 ambulancia:{
  title:"Traslado en ambulancia", fields:[
@@ -64,18 +76,20 @@ incidencia:{
  ["persona","Nombre de la persona","text",true],["tipoMovimiento","Movimiento","select",true,["Entrada","Salida","Regreso","Otro"]],
  ["acompanado","¿A quién visita / acompaña?","text",false],["horaRelacionada","Hora de salida / regreso relacionada","time",false],
  ["pertenencias","Qué llevaba / objetos relevantes","textarea",false],["procedencia","Procedencia","text",false],
- ["observaciones","Descripción de la incidencia","textarea",true]
+ ["observaciones","Descripción de la incidencia","textarea",true],
+ ["foto","📷 Foto / evidencia","photo",false]
 ]},
 nota:{
  title:"Nota libre", fields:[
- ["titulo","Título / asunto","text",true],["nota","Nota","textarea",true]
+ ["titulo","Título / asunto","text",true],["nota","Nota","textarea",true],
+ ["foto","📷 Foto / evidencia","photo",false]
 ]}
 };
 
 function fieldHTML(f){
  const [id,label,type,required,opts]=f;
  if(type==="textarea") return `<label class="full-col">${label}${required?" *":""}<textarea id="f_${id}" ${required?"required":""} placeholder="Escribe aquí…"></textarea></label>`;
- if(type==="photo") return `<label class="full-col">${label}<input id="f_${id}" type="file" accept="image/*" capture="environment"></label>`;
+ if(type==="photo") return `<label class="full-col">${label}<input id="f_${id}" type="file" accept="image/*" capture="environment"><small class="photo-help">Puedes tomar una foto o elegirla del dispositivo.</small></label>`;
  if(type==="select") return `<label>${label}${required?" *":""}<select id="f_${id}" ${required?"required":""}><option value="">Seleccionar…</option>${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></label>`;
  return `<label>${label}${required?" *":""}<input id="f_${id}" type="${type}" ${required?"required":""} ${type==="number"?"min=0 max=130":""} placeholder="${label}"></label>`;
 }
@@ -101,7 +115,7 @@ $("#recordForm").onsubmit=async e=>{
      if(el?.files?.[0]) data[id]=await compressImage(el.files[0]);
    } else data[id]=el?.value?.trim()||"";
  }
- records.unshift({id:crypto.randomUUID(),type,createdAt:nowISO(),area:currentArea,data});
+ records.unshift({id:crypto.randomUUID(),type,createdAt:nowISO(),area:currentArea,guard:guardName||"Sin configurar",data});
  save();closeModal();toast("Registro guardado correctamente");
 };
 
@@ -139,6 +153,7 @@ function shareText(r){
  `━━━━━━━━━━━━━━━━━━`,
  `📌 ${typeName(r.type)}`,
  `📍 Área: ${r.area}`,
+ `👮 Guardia: ${r.guard||"Sin configurar"}`,
  `📅 Fecha y hora: ${fmt(r.createdAt)}`
  ];
  const labels={destino:"Destino del traslado",ambulancia:"Ambulancia",placaAmb:"Placa de ambulancia",choferAmb:"Conductor",
@@ -177,11 +192,18 @@ async function share(r){
 function deleteRecord(id){if(confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")){records=records.filter(r=>r.id!==id);save();toast("Registro eliminado")}}
 function render(){
  const q=($("#searchInput")?.value||"").toLowerCase();
- const arr=records.filter(r=>JSON.stringify(r).toLowerCase().includes(q));
- $("#countBadge").textContent=records.length;
+ const date=$("#dateFilter")?.value||selectedDate;
+ selectedDate=date;
+ const arr=records.filter(r=>{
+   const localDate=new Date(r.createdAt).toLocaleDateString("en-CA");
+   return localDate===date && JSON.stringify(r).toLowerCase().includes(q);
+ });
+ const dayCount=records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===date).length;
+ $("#countBadge").textContent=dayCount;
  $("#emptyState").style.display=arr.length?"none":"block";
+ $("#emptyState").innerHTML=`<div>📒</div><strong>${date===new Date().toLocaleDateString("en-CA")?"No hay registros de hoy":"No hay registros en este día"}</strong><p>${date===new Date().toLocaleDateString("en-CA")?"Selecciona una opción arriba para comenzar.":"Puedes consultar otro día desde el historial."}</p>`;
  $("#records").innerHTML=arr.map(r=>`<article class="record">
- <div class="record-top"><div><div class="record-title">${esc(typeName(r.type))}</div><div class="record-meta">📍 ${esc(r.area)} · ${esc(fmt(r.createdAt))}</div></div></div>
+ <div class="record-top"><div><div class="record-title">${esc(typeName(r.type))}</div><div class="record-meta">📍 ${esc(r.area)} · 👮 ${esc(r.guard||"Sin configurar")} · ${esc(fmt(r.createdAt))}</div></div></div>
  <div class="record-summary">${esc(summary(r))}</div>
  ${photoData(r).length?`<div class="record-photo">📷 ${photoData(r).length} foto${photoData(r).length>1?"s":""} adjunta${photoData(r).length>1?"s":""}</div>`:""}
  <div class="record-actions"><button onclick="shareById('${r.id}')">📤 Compartir</button><button onclick="editById('${r.id}')">✏️ Ver / editar</button><button class="danger" onclick="deleteRecord('${r.id}')">🗑️</button></div>
@@ -198,13 +220,33 @@ window.editById=id=>{
  r.data=data;save();closeModal();toast("Registro actualizado");};
 }
 $("#searchInput").oninput=render;
+$("#dateFilter").value=selectedDate;
+$("#dateFilter").onchange=()=>{selectedDate=$("#dateFilter").value;$("#searchInput").value="";render()};
+$("#todayBtn").onclick=()=>{selectedDate=new Date().toLocaleDateString("en-CA");$("#dateFilter").value=selectedDate;$("#searchInput").value="";render()};
+$("#historyBtn").onclick=()=>{
+  const days=[...new Set(records.map(r=>new Date(r.createdAt).toLocaleDateString("en-CA")))].sort().reverse();
+  if(!days.length)return toast("Todavía no hay días guardados");
+  const chosen=prompt("Días con registros:\n\n"+days.map((d,i)=>`${i+1}. ${d} (${records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===d).length})`).join("\n")+"\n\nEscribe la fecha (AAAA-MM-DD):",selectedDate);
+  if(chosen && /^\d{4}-\d{2}-\d{2}$/.test(chosen)){selectedDate=chosen;$("#dateFilter").value=chosen;$("#searchInput").value="";render()}
+};
 $("#shareAllBtn").onclick=async()=>{
- if(!records.length)return toast("No hay registros para compartir");
- const text=["🏥 BITÁCORA DE GUARDIA",`📅 Generada: ${fmt(new Date())}`,`📍 Registros: ${records.length}`,"━━━━━━━━━━━━━━━━━━",...records.slice().reverse().map(shareText)].join("\n\n");
+ const date=$("#dateFilter")?.value||selectedDate;
+ const dayRecords=records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===date);
+ if(!dayRecords.length)return toast("No hay registros para compartir de este día");
+ const guards=[...new Set(dayRecords.map(r=>r.guard||"Sin configurar"))];
+ const text=["🏥 BITÁCORA DE GUARDIA",`📅 Día: ${date}`,`👮 Guardia(s): ${guards.join(", ")}`,`📍 Registros: ${dayRecords.length}`,"━━━━━━━━━━━━━━━━━━",...dayRecords.slice().reverse().map(shareText)].join("\n\n");
  if(navigator.share){try{await navigator.share({title:"Bitácora de guardia",text});return}catch(e){}}
  await navigator.clipboard?.writeText(text);toast("Bitácora copiada. Puedes pegarla en WhatsApp.");
 };
 $("#changeAreaBtn").onclick=()=>{$("#areaInput").value=currentArea;$("#areaModal").classList.remove("hidden")};
+$("#guardBtn").onclick=()=>{$("#guardNameInput").value=guardName;$("#guardModal").classList.remove("hidden");$("#guardNameInput").focus()};
+$("#closeGuardModal").onclick=()=>$("#guardModal").classList.add("hidden");
+$("#saveGuardBtn").onclick=()=>{
+ const n=$("#guardNameInput").value.trim();
+ if(!n)return toast("Escribe el nombre del guardia");
+ guardName=n;localStorage.setItem(GUARD_KEY,n);setGuard();$("#guardModal").classList.add("hidden");toast("Guardia configurado");
+};
+
 $("#closeAreaModal").onclick=()=>$("#areaModal").classList.add("hidden");
 $("#saveAreaBtn").onclick=()=>{const a=$("#areaInput").value.trim();if(!a)return;currentArea=a;localStorage.setItem(AREA_KEY,a);setArea();$("#areaModal").classList.add("hidden");toast("Área actualizada")};
 
@@ -213,3 +255,15 @@ $("#installBtn").onclick=async()=>{if(!deferredInstall)return;deferredInstall.pr
 
 if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 render();
+
+/* Evita menú contextual/selección accidental al mantener pulsada la pantalla. */
+document.addEventListener("contextmenu",e=>{
+  if(!["INPUT","TEXTAREA","SELECT"].includes(e.target.tagName)) e.preventDefault();
+});
+let longPressTimer;
+document.addEventListener("touchstart",e=>{
+  if(["INPUT","TEXTAREA","SELECT","BUTTON"].includes(e.target.tagName)) return;
+  longPressTimer=setTimeout(()=>{try{window.getSelection()?.removeAllRanges()}catch(_){}},450);
+},{passive:true});
+document.addEventListener("touchend",()=>clearTimeout(longPressTimer),{passive:true});
+document.addEventListener("touchmove",()=>clearTimeout(longPressTimer),{passive:true});

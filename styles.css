@@ -43,3 +43,21 @@ textarea{min-height:90px;resize:vertical}.check{display:flex;gap:8px;align-items
 @media(max-width:500px){.toolbar{flex-direction:column}.area-panel{align-items:flex-start;gap:10px}.form-grid{grid-template-columns:1fr}}
 
 .record-photo{font-size:11px;color:var(--primary);font-weight:750;margin-bottom:8px}
+
+/* v0.3: no seleccionar texto en la interfaz; los campos siguen funcionando */
+body, body *{
+  -webkit-user-select:none;
+  user-select:none;
+}
+input, textarea, select, [contenteditable="true"]{
+  -webkit-user-select:text;
+  user-select:text;
+}
+.history-bar{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:0 0 14px}
+.history-bar label{margin:0;flex:1;min-width:170px}
+.history-bar button{white-space:nowrap}
+@media(max-width:500px){.history-bar{display:grid;grid-template-columns:1fr 1fr}.history-bar label{grid-column:1/-1}}
+
+.area-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+#guardDisplay{font-weight:650;color:var(--primary);margin-top:2px}
+@media(max-width:500px){.area-actions{width:100%}.area-actions button{flex:1}}
