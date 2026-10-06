@@ -38,3 +38,6 @@ v0.3.1: Se agregó identidad configurable del guardia. El nombre del guardia se 
 
 
 v0.3.2: Interfaz compacta y rápida; configuración, historial y compartir están en menú lateral. Placeholder genérico para nombre del guardia. Compartir fotografías usa una sola imagen comprimida (si hay varias, se combinan) para reducir problemas de WhatsApp y memoria.
+
+
+v0.3.3: Corrección del error de consola causado por referencias a botones eliminados al cambiar a la interfaz con menú lateral. Se eliminaron listeners obsoletos y se restauraron los controles actuales del menú, área, guardia, historial y navegación por día. También se incrementó la caché del Service Worker.

@@ -233,13 +233,6 @@ window.editById=id=>{
 $("#searchInput").oninput=render;
 $("#dateFilter").value=selectedDate;
 $("#dateFilter").onchange=()=>{selectedDate=$("#dateFilter").value;$("#searchInput").value="";render()};
-$("#todayBtn").onclick=()=>{selectedDate=new Date().toLocaleDateString("en-CA");$("#dateFilter").value=selectedDate;$("#searchInput").value="";render()};
-$("#historyBtn").onclick=()=>{
-  const days=[...new Set(records.map(r=>new Date(r.createdAt).toLocaleDateString("en-CA")))].sort().reverse();
-  if(!days.length)return toast("Todavía no hay días guardados");
-  const chosen=prompt("Días con registros:\n\n"+days.map((d,i)=>`${i+1}. ${d} (${records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===d).length})`).join("\n")+"\n\nEscribe la fecha (AAAA-MM-DD):",selectedDate);
-  if(chosen && /^\d{4}-\d{2}-\d{2}$/.test(chosen)){selectedDate=chosen;$("#dateFilter").value=chosen;$("#searchInput").value="";render()}
-};
 async function shareCurrentDay(){
  const date=$("#dateFilter")?.value||selectedDate;
  const dayRecords=records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===date);
@@ -250,21 +243,87 @@ async function shareCurrentDay(){
  try{await navigator.clipboard?.writeText(text)}catch(_){}
  toast("Reporte del día copiado. Puedes pegarlo en WhatsApp.");
 }
-$("#changeAreaBtn").onclick=()=>{$("#areaInput").value=currentArea;$("#areaModal").classList.remove("hidden")};
-$("#guardBtn").onclick=()=>{$("#guardNameInput").value=guardName;$("#guardModal").classList.remove("hidden");$("#guardNameInput").focus()};
+function openDrawer(){
+ $("#drawer").classList.add("open");
+ $("#drawerBackdrop").classList.remove("hidden");
+ $("#drawer").setAttribute("aria-hidden","false");
+}
+function closeDrawer(){
+ $("#drawer").classList.remove("open");
+ $("#drawerBackdrop").classList.add("hidden");
+ $("#drawer").setAttribute("aria-hidden","true");
+}
+$("#menuBtn").onclick=openDrawer;
+$("#closeDrawer").onclick=closeDrawer;
+$("#drawerBackdrop").onclick=closeDrawer;
+
+function openAreaModal(){
+ $("#areaInput").value=currentArea;
+ $("#areaModal").classList.remove("hidden");
+ closeDrawer();
+}
+function openGuardModal(){
+ $("#guardNameInput").value=guardName;
+ $("#guardModal").classList.remove("hidden");
+ closeDrawer();
+ $("#guardNameInput").focus();
+}
+$("#quickAreaBtn").onclick=openAreaModal;
+$("#drawerArea").onclick=openAreaModal;
+$("#drawerGuard").onclick=openGuardModal;
+$("#drawerToday").onclick=()=>{
+ selectedDate=new Date().toLocaleDateString("en-CA");
+ $("#dateFilter").value=selectedDate;
+ $("#searchInput").value="";
+ render(); closeDrawer();
+};
+$("#drawerHistory").onclick=()=>{openHistory();closeDrawer()};
+$("#drawerShare").onclick=()=>{shareCurrentDay();closeDrawer()};
+
+$("#closeAreaModal").onclick=()=>$("#areaModal").classList.add("hidden");
+$("#saveAreaBtn").onclick=()=>{
+ const a=$("#areaInput").value.trim();
+ if(!a)return toast("Escribe un área");
+ currentArea=a;localStorage.setItem(AREA_KEY,a);setArea();
+ $("#areaModal").classList.add("hidden");toast("Área actualizada");
+};
+
 $("#closeGuardModal").onclick=()=>$("#guardModal").classList.add("hidden");
 $("#saveGuardBtn").onclick=()=>{
  const n=$("#guardNameInput").value.trim();
  if(!n)return toast("Escribe el nombre del guardia");
- guardName=n;localStorage.setItem(GUARD_KEY,n);setGuard();$("#guardModal").classList.add("hidden");toast("Guardia configurado");
- if(pendingQuickType){const t=pendingQuickType;pendingQuickType=null;setTimeout(()=>openForm(t),120)}
+ guardName=n;localStorage.setItem(GUARD_KEY,n);setGuard();
+ $("#guardModal").classList.add("hidden");toast("Guardia configurado");
+ if(pendingQuickType){
+   const t=pendingQuickType; pendingQuickType=null;
+   setTimeout(()=>openForm(t),120);
+ }
 };
 
-$("#closeAreaModal").onclick=()=>$("#areaModal").classList.add("hidden");
-$("#saveAreaBtn").onclick=()=>{const a=$("#areaInput").value.trim();if(!a)return;currentArea=a;localStorage.setItem(AREA_KEY,a);setArea();$("#areaModal").classList.add("hidden");toast("Área actualizada")};
+function openHistory(){
+ const days=[...new Set(records.map(r=>new Date(r.createdAt).toLocaleDateString("en-CA")))].sort().reverse();
+ if(!days.length)return toast("Todavía no hay días guardados");
+ const chosen=prompt(
+   "Escribe la fecha que deseas consultar (AAAA-MM-DD):\n\n"+
+   days.map(d=>`${d} · ${records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===d).length} registros`).join("\n"),
+   selectedDate
+ );
+ if(chosen && /^\d{4}-\d{2}-\d{2}$/.test(chosen)){
+   selectedDate=chosen;$("#dateFilter").value=chosen;$("#searchInput").value="";render();
+ }
+}
+
+$("#prevDayBtn").onclick=()=>{
+ const d=new Date(selectedDate+"T12:00:00"); d.setDate(d.getDate()-1);
+ selectedDate=d.toLocaleDateString("en-CA");$("#dateFilter").value=selectedDate;$("#searchInput").value="";render();
+};
+$("#nextDayBtn").onclick=()=>{
+ const d=new Date(selectedDate+"T12:00:00"); d.setDate(d.getDate()+1);
+ selectedDate=d.toLocaleDateString("en-CA");$("#dateFilter").value=selectedDate;$("#searchInput").value="";render();
+};
 
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstall=e;$("#installBtn").classList.remove("hidden")});
-$("#installBtn").onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();deferredInstall=null};
+$("#installBtn")?.addEventListener("click",async()=>{if(!deferredInstall)return;deferredInstall.prompt();deferredInstall=null});
 
 if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 render();
