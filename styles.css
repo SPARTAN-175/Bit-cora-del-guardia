@@ -81,3 +81,10 @@ input, textarea, select, [contenteditable="true"]{
 .record-clickable{cursor:pointer;position:relative}.record-clickable:active{transform:scale(.995)}
 .record-top{align-items:flex-start}.return-btn{border:0;width:30px;height:30px;border-radius:50%;background:#e4f5ef;color:#087f6d;font-size:17px;font-weight:900;display:grid;place-items:center;flex:0 0 auto}.return-btn:active{transform:scale(.92)}
 .return-status{background:#e7f6ed;color:#177245;border-radius:999px;padding:6px 8px;font-size:11px;font-weight:800;white-space:nowrap}
+/* v0.4.1 — selector de fotos explícito */
+.photo-picker{display:block}
+.field-label{display:block;font-weight:750;margin-bottom:7px}
+.photo-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.photo-action{flex:1;min-width:130px;padding:10px 12px}
+.photo-preview{margin-top:9px;min-height:0}
+.photo-preview img{display:block;max-width:180px;max-height:130px;border-radius:10px;object-fit:cover;border:1px solid var(--line)}

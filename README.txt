@@ -47,3 +47,6 @@ v0.3.4: CORRECCIÓN CRÍTICA DE COMPARTIR. Los Data URL/Base64 de las fotografí
 
 
 v0.4.0: Entrada/salida reemplaza el nombre Incidencia; las tarjetas se abren al tocarlas; las salidas tienen botón para registrar automáticamente la hora de regreso; se agregó historial de navegación con botón Atrás; se agregó exportación/importación de respaldo JSON con configuración, registros y fotografías.
+
+
+v0.4.1: Se corrigió el guardado de fotografías. Ahora la interfaz ofrece dos acciones explícitas: Tomar foto (cámara) y Galería. Las fotos se comprimen a un tamaño más ligero antes de guardarse localmente y se muestra una vista previa. Al editar un registro, la foto existente se conserva si no se selecciona una nueva. Se agregó manejo de error de almacenamiento.

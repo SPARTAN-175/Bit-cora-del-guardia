@@ -7,6 +7,7 @@ let guardName=localStorage.getItem(GUARD_KEY)||"";
 let selectedDate=new Date().toLocaleDateString("en-CA");
 let deferredInstall=null;
 let pendingQuickType=null;
+let photoFiles={};
 if(!history.state?.bitacora)history.replaceState({bitacora:true,view:"base"},"",location.href);
 function pushView(view){history.pushState({bitacora:true,view},"",location.href)}
 function replaceView(view){history.replaceState({bitacora:true,view},"",location.href)}
@@ -19,7 +20,10 @@ const fmt=d=>new Intl.DateTimeFormat("es-MX",{dateStyle:"short",timeStyle:"short
 const fmtTime=d=>new Intl.DateTimeFormat("es-MX",{hour:"2-digit",minute:"2-digit"}).format(new Date(d));
 const val=k=>$(k)?.value?.trim()||"";
 
-function save(){localStorage.setItem(KEY,JSON.stringify(records));render()}
+function save(){
+ try{localStorage.setItem(KEY,JSON.stringify(records));render();return true}
+ catch(e){console.error(e);toast("No se pudo guardar: el almacenamiento está lleno. La foto es demasiado grande.");return false}
+}
 function toast(t){const x=$("#toast");x.textContent=t;x.classList.add("show");setTimeout(()=>x.classList.remove("show"),2200)}
 function updateClock(){ $("#clock").textContent=fmt(new Date()) }
 setInterval(updateClock,1000);updateClock();
@@ -101,9 +105,19 @@ nota:{
 function fieldHTML(f){
  const [id,label,type,required,opts]=f;
  if(type==="textarea") return `<label class="full-col">${label}${required?" *":""}<textarea id="f_${id}" ${required?"required":""} placeholder="Escribe aquí…"></textarea></label>`;
- if(type==="photo") return `<label class="full-col">${label}<input id="f_${id}" type="file" accept="image/*" capture="environment"><small class="photo-help">Puedes tomar una foto o elegirla del dispositivo.</small></label>`;
+ if(type==="photo") return `<div class="full-col photo-picker"><span class="field-label">${label}</span><div class="photo-buttons"><button type="button" class="secondary photo-action" id="cam_${id}">📷 Tomar foto</button><button type="button" class="secondary photo-action" id="gal_${id}">🖼️ Galería</button></div><input id="camfile_${id}" type="file" accept="image/*" capture="environment" hidden><input id="galfile_${id}" type="file" accept="image/*" hidden><div id="preview_${id}" class="photo-preview"></div><small class="photo-help">Puedes tomar una foto ahora o elegir una que ya tengas guardada.</small></div>`;
  if(type==="select") return `<label>${label}${required?" *":""}<select id="f_${id}" ${required?"required":""}><option value="">Seleccionar…</option>${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></label>`;
  return `<label>${label}${required?" *":""}<input id="f_${id}" type="${type}" ${required?"required":""} ${type==="number"?"min=0 max=130":""} placeholder="${label}"></label>`;
+}
+
+function setupPhotoPickers(fields){
+ photoFiles={};
+ fields.filter(([id,,ft])=>ft==="photo").forEach(([id])=>{
+  const camBtn=$("#cam_"+id),galBtn=$("#gal_"+id),cam=$("#camfile_"+id),gal=$("#galfile_"+id),preview=$("#preview_"+id);
+  camBtn.onclick=()=>cam.click(); galBtn.onclick=()=>gal.click();
+  const choose=file=>{if(!file)return;photoFiles[id]=file;preview.innerHTML="";const img=document.createElement("img");img.src=URL.createObjectURL(file);preview.appendChild(img);};
+  cam.onchange=e=>choose(e.target.files?.[0]); gal.onchange=e=>choose(e.target.files?.[0]);
+ });
 }
 
 function openForm(type,useHistory=true){
@@ -112,7 +126,7 @@ function openForm(type,useHistory=true){
  $("#recordForm").innerHTML=`<div class="form-grid">${cfg.fields.map(fieldHTML).join("")}</div>
  <div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">💾 Guardar registro</button></div>`;
  $("#modal").classList.remove("hidden");$("#modal").setAttribute("aria-hidden","false");
- $("#recordForm").dataset.type=type;$("#f_nombre")?.focus();$("#cancelForm").onclick=closeModal;
+ $("#recordForm").dataset.type=type;setupPhotoPickers(cfg.fields);$("#f_nombre")?.focus();$("#cancelForm").onclick=closeModal;
 }
 
 function closeModal(fromPop=false){$("#modal").classList.add("hidden");$("#modal").setAttribute("aria-hidden","true");if(!fromPop&&history.state?.view==="record")history.back()}
@@ -129,7 +143,7 @@ $("#recordForm").onsubmit=async e=>{
  for(const [id, , fieldType] of cfg.fields){
    const el=document.querySelector("#f_"+id);
    if(fieldType==="photo"){
-     if(el?.files?.[0]) data[id]=await compressImage(el.files[0]);
+     if(photoFiles[id]) data[id]=await compressImage(photoFiles[id]);
    } else data[id]=el?.value?.trim()||"";
  }
  records.unshift({id:crypto.randomUUID(),type,createdAt:nowISO(),area:currentArea,guard:guardName||"Sin configurar",data});
@@ -153,10 +167,10 @@ function compressImage(file){
    reader.onload=()=>{
      const img=new Image();
      img.onload=()=>{
-       const max=1280, scale=Math.min(1,max/Math.max(img.width,img.height));
+       const max=900, scale=Math.min(1,max/Math.max(img.width,img.height));
        const c=document.createElement("canvas");c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);
        c.getContext("2d").drawImage(img,0,0,c.width,c.height);
-       resolve(c.toDataURL("image/jpeg",.72));
+       resolve(c.toDataURL("image/jpeg",.58));
      }; img.onerror=reject; img.src=reader.result;
    };reader.onerror=reject;reader.readAsDataURL(file);
  });
@@ -318,8 +332,10 @@ window.editById=id=>{
  const r=records.find(x=>x.id===id);if(!r)return;
  openForm(r.type,!(history.state?.view==="record"));
  forms[r.type].fields.forEach(([k, , ft])=>{const el=$("#f_"+k);if(el && ft!=="photo")el.value=r.data[k]||""});
+ setupPhotoPickers(forms[r.type].fields);
+ forms[r.type].fields.forEach(([k,,ft])=>{if(ft==="photo"&&r.data[k]){const preview=$("#preview_"+k);if(preview)preview.innerHTML=`<img src="${r.data[k]}" alt="Foto guardada">`;}});
  $("#recordForm").onsubmit=async e=>{e.preventDefault();const cfg=forms[r.type];const data={};
- for(const [k, , ft] of cfg.fields){const el=$("#f_"+k); if(ft==="photo"){if(el?.files?.[0])data[k]=await compressImage(el.files[0]);else if(r.data[k])data[k]=r.data[k];}else data[k]=el?.value?.trim()||"";}
+ for(const [k, , ft] of cfg.fields){const el=$("#f_"+k); if(ft==="photo"){if(photoFiles[k])data[k]=await compressImage(photoFiles[k]);else if(r.data[k])data[k]=r.data[k];}else data[k]=el?.value?.trim()||"";}
  r.data=data;save();closeModal();toast("Registro actualizado");};
 }
 $("#searchInput").oninput=render;
