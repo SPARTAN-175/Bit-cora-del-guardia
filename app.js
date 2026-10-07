@@ -8,6 +8,8 @@ let selectedDate=new Date().toLocaleDateString("en-CA");
 let deferredInstall=null;
 let pendingQuickType=null;
 let photoFiles={};
+let photoCleared={};
+let editingRecordId=null;
 if(!history.state?.bitacora)history.replaceState({bitacora:true,view:"base"},"",location.href);
 function pushView(view){history.pushState({bitacora:true,view},"",location.href)}
 function replaceView(view){history.replaceState({bitacora:true,view},"",location.href)}
@@ -105,22 +107,26 @@ nota:{
 function fieldHTML(f){
  const [id,label,type,required,opts]=f;
  if(type==="textarea") return `<label class="full-col">${label}${required?" *":""}<textarea id="f_${id}" ${required?"required":""} placeholder="Escribe aquí…"></textarea></label>`;
- if(type==="photo") return `<div class="full-col photo-picker"><span class="field-label">${label}</span><div class="photo-buttons"><button type="button" class="secondary photo-action" id="cam_${id}">📷 Tomar foto</button><button type="button" class="secondary photo-action" id="gal_${id}">🖼️ Galería</button></div><input id="camfile_${id}" type="file" accept="image/*" capture="environment" hidden><input id="galfile_${id}" type="file" accept="image/*" hidden><div id="preview_${id}" class="photo-preview"></div><small class="photo-help">Puedes tomar una foto ahora o elegir una que ya tengas guardada.</small></div>`;
+ if(type==="photo") return `<div class="full-col photo-picker"><span class="field-label">${label}</span><div class="photo-buttons"><button type="button" class="secondary photo-action" id="cam_${id}">📷 Tomar foto</button><button type="button" class="secondary photo-action" id="gal_${id}">🖼️ Galería</button><button type="button" class="danger photo-action photo-clear" id="clear_${id}">✕ Quitar foto</button></div><input id="camfile_${id}" type="file" accept="image/*" capture="environment" hidden><input id="galfile_${id}" type="file" accept="image/*" hidden><div id="preview_${id}" class="photo-preview"></div><small class="photo-help">Puedes tomar una foto ahora o elegir una que ya tengas guardada.</small></div>`;
  if(type==="select") return `<label>${label}${required?" *":""}<select id="f_${id}" ${required?"required":""}><option value="">Seleccionar…</option>${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></label>`;
  return `<label>${label}${required?" *":""}<input id="f_${id}" type="${type}" ${required?"required":""} ${type==="number"?"min=0 max=130":""} placeholder="${label}"></label>`;
 }
 
-function setupPhotoPickers(fields){
- photoFiles={};
+function setupPhotoPickers(fields, resetState=true){
+ if(resetState){photoFiles={};photoCleared={};}
  fields.filter(([id,,ft])=>ft==="photo").forEach(([id])=>{
-  const camBtn=$("#cam_"+id),galBtn=$("#gal_"+id),cam=$("#camfile_"+id),gal=$("#galfile_"+id),preview=$("#preview_"+id);
+  const camBtn=$("#cam_"+id),galBtn=$("#gal_"+id),clearBtn=$("#clear_"+id),cam=$("#camfile_"+id),gal=$("#galfile_"+id),preview=$("#preview_"+id);
   camBtn.onclick=()=>cam.click(); galBtn.onclick=()=>gal.click();
-  const choose=file=>{if(!file)return;photoFiles[id]=file;preview.innerHTML="";const img=document.createElement("img");img.src=URL.createObjectURL(file);preview.appendChild(img);};
+  const choose=file=>{if(!file)return;photoFiles[id]=file;photoCleared[id]=false;preview.innerHTML="";const img=document.createElement("img");img.src=URL.createObjectURL(file);preview.appendChild(img);};
+  const clear=()=>{photoFiles[id]=null;photoCleared[id]=true;cam.value="";gal.value="";preview.innerHTML="";};
+  clearBtn.onclick=clear;
   cam.onchange=e=>choose(e.target.files?.[0]); gal.onchange=e=>choose(e.target.files?.[0]);
  });
 }
 
 function openForm(type,useHistory=true){
+ editingRecordId=null;
+ photoFiles={};photoCleared={};
  const cfg=forms[type]; if(useHistory)pushView("record"); $("#modalTitle").textContent=cfg.title;
  $("#modalEyebrow").textContent=`NUEVO REGISTRO · ${currentArea.toUpperCase()}`;
  $("#recordForm").innerHTML=`<div class="form-grid">${cfg.fields.map(fieldHTML).join("")}</div>
@@ -138,16 +144,21 @@ $("#closeModal").onclick=closeModal;
 $("#recordForm").onsubmit=async e=>{
  e.preventDefault();
  if(!guardName){pendingQuickType=e.currentTarget.dataset.type;closeModal();openGuardModal();return}
- const type=e.currentTarget.dataset.type,cfg=forms[type];
- const data={};
- for(const [id, , fieldType] of cfg.fields){
-   const el=document.querySelector("#f_"+id);
+ const type=e.currentTarget.dataset.type,cfg=forms[type],data={};
+ for(const [id,,fieldType] of cfg.fields){
+   const el=$("#f_"+id);
    if(fieldType==="photo"){
      if(photoFiles[id]) data[id]=await compressImage(photoFiles[id]);
+     else if(editingRecordId){const old=records.find(x=>x.id===editingRecordId);if(old?.data?.[id]&&!photoCleared[id])data[id]=old.data[id];}
    } else data[id]=el?.value?.trim()||"";
  }
- records.unshift({id:crypto.randomUUID(),type,createdAt:nowISO(),area:currentArea,guard:guardName||"Sin configurar",data});
- save();closeModal();toast("Registro guardado correctamente");
+ if(editingRecordId){
+   const r=records.find(x=>x.id===editingRecordId);
+   if(r){r.data=data;save();closeModal();toast("Registro actualizado");}
+ }else{
+   records.unshift({id:crypto.randomUUID(),type,createdAt:nowISO(),area:currentArea,guard:guardName||"Sin configurar",data});
+   save();closeModal();toast("Registro guardado correctamente");
+ }
 };
 
 function summary(r){
@@ -330,14 +341,14 @@ window.openRecordById=id=>{const r=records.find(x=>x.id===id);if(r)editById(id)}
 window.deleteRecord=deleteRecord;
 window.editById=id=>{
  const r=records.find(x=>x.id===id);if(!r)return;
+ editingRecordId=r.id;
  openForm(r.type,!(history.state?.view==="record"));
- forms[r.type].fields.forEach(([k, , ft])=>{const el=$("#f_"+k);if(el && ft!=="photo")el.value=r.data[k]||""});
- setupPhotoPickers(forms[r.type].fields);
- forms[r.type].fields.forEach(([k,,ft])=>{if(ft==="photo"&&r.data[k]){const preview=$("#preview_"+k);if(preview)preview.innerHTML=`<img src="${r.data[k]}" alt="Foto guardada">`;}});
- $("#recordForm").onsubmit=async e=>{e.preventDefault();const cfg=forms[r.type];const data={};
- for(const [k, , ft] of cfg.fields){const el=$("#f_"+k); if(ft==="photo"){if(photoFiles[k])data[k]=await compressImage(photoFiles[k]);else if(r.data[k])data[k]=r.data[k];}else data[k]=el?.value?.trim()||"";}
- r.data=data;save();closeModal();toast("Registro actualizado");};
-}
+ editingRecordId=r.id;
+ forms[r.type].fields.forEach(([k,,ft])=>{const el=$("#f_"+k);if(el&&ft!=="photo")el.value=r.data[k]||""});
+ setupPhotoPickers(forms[r.type].fields,false);
+ forms[r.type].fields.forEach(([k,,ft])=>{if(ft==="photo"&&r.data[k]){const preview=$("#preview_"+k);if(preview)preview.innerHTML=`<img src="${r.data[k]}" alt="Foto guardada">`}});
+};
+
 $("#searchInput").oninput=render;
 $("#dateFilter").value=selectedDate;
 $("#dateFilter").onchange=()=>{selectedDate=$("#dateFilter").value;$("#searchInput").value="";render()};

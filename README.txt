@@ -50,3 +50,6 @@ v0.4.0: Entrada/salida reemplaza el nombre Incidencia; las tarjetas se abren al 
 
 
 v0.4.1: Se corrigió el guardado de fotografías. Ahora la interfaz ofrece dos acciones explícitas: Tomar foto (cámara) y Galería. Las fotos se comprimen a un tamaño más ligero antes de guardarse localmente y se muestra una vista previa. Al editar un registro, la foto existente se conserva si no se selecciona una nueva. Se agregó manejo de error de almacenamiento.
+
+
+v0.4.1b: Corrección de creación/edición: los registros nuevos siempre crean un registro independiente y ya no pueden sobrescribir accidentalmente el último. Se agregó botón ✕ Quitar foto; al editar permite conservar la foto existente, reemplazarla o eliminarla.

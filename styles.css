@@ -88,3 +88,6 @@ input, textarea, select, [contenteditable="true"]{
 .photo-action{flex:1;min-width:130px;padding:10px 12px}
 .photo-preview{margin-top:9px;min-height:0}
 .photo-preview img{display:block;max-width:180px;max-height:130px;border-radius:10px;object-fit:cover;border:1px solid var(--line)}
+
+.photo-clear{padding:8px 10px;font-size:11px}
+.photo-preview:empty{display:none}
