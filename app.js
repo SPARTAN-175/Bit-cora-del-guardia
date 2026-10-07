@@ -7,11 +7,16 @@ let guardName=localStorage.getItem(GUARD_KEY)||"";
 let selectedDate=new Date().toLocaleDateString("en-CA");
 let deferredInstall=null;
 let pendingQuickType=null;
+if(!history.state?.bitacora)history.replaceState({bitacora:true,view:"base"},"",location.href);
+function pushView(view){history.pushState({bitacora:true,view},"",location.href)}
+function replaceView(view){history.replaceState({bitacora:true,view},"",location.href)}
+function hideAllOverlays(){["#modal","#areaModal","#guardModal"].forEach(s=>$(s)?.classList.add("hidden"));$("#drawer")?.classList.remove("open");$("#drawerBackdrop")?.classList.add("hidden");}
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
 const nowISO=()=>new Date().toISOString();
 const fmt=d=>new Intl.DateTimeFormat("es-MX",{dateStyle:"short",timeStyle:"short"}).format(new Date(d));
+const fmtTime=d=>new Intl.DateTimeFormat("es-MX",{hour:"2-digit",minute:"2-digit"}).format(new Date(d));
 const val=k=>$(k)?.value?.trim()||"";
 
 function save(){localStorage.setItem(KEY,JSON.stringify(records));render()}
@@ -101,8 +106,8 @@ function fieldHTML(f){
  return `<label>${label}${required?" *":""}<input id="f_${id}" type="${type}" ${required?"required":""} ${type==="number"?"min=0 max=130":""} placeholder="${label}"></label>`;
 }
 
-function openForm(type){
- const cfg=forms[type]; $("#modalTitle").textContent=cfg.title;
+function openForm(type,useHistory=true){
+ const cfg=forms[type]; if(useHistory)pushView("record"); $("#modalTitle").textContent=cfg.title;
  $("#modalEyebrow").textContent=`NUEVO REGISTRO · ${currentArea.toUpperCase()}`;
  $("#recordForm").innerHTML=`<div class="form-grid">${cfg.fields.map(fieldHTML).join("")}</div>
  <div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">💾 Guardar registro</button></div>`;
@@ -110,7 +115,7 @@ function openForm(type){
  $("#recordForm").dataset.type=type;$("#f_nombre")?.focus();$("#cancelForm").onclick=closeModal;
 }
 
-function closeModal(){$("#modal").classList.add("hidden");$("#modal").setAttribute("aria-hidden","true")}
+function closeModal(fromPop=false){$("#modal").classList.add("hidden");$("#modal").setAttribute("aria-hidden","true");if(!fromPop&&history.state?.view==="record")history.back()}
 document.querySelectorAll(".quick-card").forEach(b=>b.onclick=()=>{
  if(!guardName){pendingQuickType=b.dataset.type;$("#guardNameInput").value="";$("#guardModal").classList.remove("hidden");$("#guardNameInput").focus();return;}
  openForm(b.dataset.type);
@@ -137,10 +142,10 @@ function summary(r){
  if(r.type==="internamiento") return `${d.nombre||"Paciente"} · Responsable: ${d.responsable||"—"}`;
  if(r.type==="vehiculo") return `${d.tipoVehiculo||"Vehículo"} · ${d.placa||"Sin placa"}${d.chofer?" · "+d.chofer:""}`;
  if(r.type==="ambulancia") return `Traslado a ${d.destino||"destino no indicado"} · ${d.nombre||"Paciente"}${d.choferAmb?" · Conductor: "+d.choferAmb:""}`;
- if(r.type==="incidencia") return `${d.tipoMovimiento||"Movimiento"} · ${d.persona||"Persona"}${d.acompanado?" · "+d.acompanado:""}`;
+ if(r.type==="incidencia") return `${d.tipoMovimiento||"Movimiento"} · ${d.persona||"Persona"}${d.acompanado?" · "+d.acompanado:""}${r.returnedAt?" · ↩ Regresó "+fmtTime(r.returnedAt):""}`;
  return `${d.titulo||"Nota"} · ${d.nota||""}`;
 }
-function typeName(t){return {paciente:"Paciente",internamiento:"Internamiento",vehiculo:"Vehículo",ambulancia:"Traslado en ambulancia",incidencia:"Incidencia",nota:"Nota"}[t]}
+function typeName(t){return {paciente:"Paciente",internamiento:"Internamiento",vehiculo:"Vehículo",ambulancia:"Traslado en ambulancia",incidencia:"Entrada / salida",nota:"Nota"}[t]}
 
 function compressImage(file){
  return new Promise((resolve,reject)=>{
@@ -168,6 +173,7 @@ function shareText(r){
   `👮 Guardia: ${r.guard||"Sin configurar"}`,
   `📅 Fecha y hora: ${fmt(r.createdAt)}`
  ];
+ if(r.type==="incidencia" && r.data.tipoMovimiento==="Salida") lines.push(r.returnedAt?`↩️ Regreso: ${fmt(r.returnedAt)}`:`↩️ Regreso: Pendiente`);
  const labels={
   destino:"Destino del traslado",ambulancia:"Ambulancia",placaAmb:"Placa de ambulancia",choferAmb:"Conductor",
   kmSalida:"Kilometraje de salida",combustible:"Nivel de combustible",
@@ -268,6 +274,14 @@ async function share(r){
    ?"Texto copiado. Este navegador no permite adjuntar la foto desde aquí."
    :"Texto copiado. Puedes pegarlo en WhatsApp.");
 }
+function markReturnById(id){
+ const r=records.find(x=>x.id===id);
+ if(!r || r.type!=="incidencia" || r.data.tipoMovimiento!=="Salida") return;
+ if(r.returnedAt) return toast(`Regreso ya registrado: ${fmtTime(r.returnedAt)}`);
+ r.returnedAt=nowISO();save();toast(`↩️ Regreso registrado a las ${fmtTime(r.returnedAt)}`);
+}
+window.markReturnById=markReturnById;
+
 function deleteRecord(id){if(confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")){records=records.filter(r=>r.id!==id);save();toast("Registro eliminado")}}
 function render(){
  const q=($("#searchInput")?.value||"").toLowerCase();
@@ -281,18 +295,28 @@ function render(){
  $("#countBadge").textContent=dayCount;
  $("#emptyState").style.display=arr.length?"none":"block";
  $("#emptyState").innerHTML=`<div>📒</div><strong>${date===new Date().toLocaleDateString("en-CA")?"No hay registros de hoy":"No hay registros en este día"}</strong><p>${date===new Date().toLocaleDateString("en-CA")?"Selecciona una opción arriba para comenzar.":"Puedes consultar otro día desde el historial."}</p>`;
- $("#records").innerHTML=arr.map(r=>`<article class="record">
- <div class="record-top"><div><div class="record-title">${esc(typeName(r.type))}</div><div class="record-meta">📍 ${esc(r.area)} · 👮 ${esc(r.guard||"Sin configurar")} · ${esc(fmt(r.createdAt))}</div></div></div>
+ $("#records").innerHTML=arr.map(r=>`<article class="record record-clickable" onclick="openRecordById('${r.id}')">
+ <div class="record-top">
+  <div><div class="record-title">${esc(typeName(r.type))}</div><div class="record-meta">📍 ${esc(r.area)} · 👮 ${esc(r.guard||"Sin configurar")} · ${esc(fmt(r.createdAt))}</div></div>
+  ${r.type==="incidencia" && r.data.tipoMovimiento==="Salida" ? (r.returnedAt
+   ? `<span class="return-status">↩️ ${esc(fmtTime(r.returnedAt))}</span>`
+   : `<button class="return-btn" title="Marcar regreso" onclick="event.stopPropagation();markReturnById('${r.id}')">↩</button>`) : ""}
+ </div>
  <div class="record-summary">${esc(summary(r))}</div>
  ${photoData(r).length?`<div class="record-photo">📷 ${photoData(r).length} foto${photoData(r).length>1?"s":""} adjunta${photoData(r).length>1?"s":""}</div>`:""}
- <div class="record-actions"><button onclick="shareById('${r.id}')">📤 Compartir</button><button onclick="editById('${r.id}')">✏️ Ver / editar</button><button class="danger" onclick="deleteRecord('${r.id}')">🗑️</button></div>
- </article>`).join("");
+ <div class="record-actions">
+  <button onclick="event.stopPropagation();shareById('${r.id}')">📤 Compartir</button>
+  <button onclick="event.stopPropagation();editById('${r.id}')">✏️ Ver / editar</button>
+  <button class="danger" onclick="event.stopPropagation();deleteRecord('${r.id}')">🗑️</button>
+ </div>
+</article>`).join("");
 }
 window.shareById=id=>{const r=records.find(x=>x.id===id);if(r)share(r)}
+window.openRecordById=id=>{const r=records.find(x=>x.id===id);if(r)editById(id)};
 window.deleteRecord=deleteRecord;
 window.editById=id=>{
  const r=records.find(x=>x.id===id);if(!r)return;
- openForm(r.type);
+ openForm(r.type,!(history.state?.view==="record"));
  forms[r.type].fields.forEach(([k, , ft])=>{const el=$("#f_"+k);if(el && ft!=="photo")el.value=r.data[k]||""});
  $("#recordForm").onsubmit=async e=>{e.preventDefault();const cfg=forms[r.type];const data={};
  for(const [k, , ft] of cfg.fields){const el=$("#f_"+k); if(ft==="photo"){if(el?.files?.[0])data[k]=await compressImage(el.files[0]);else if(r.data[k])data[k]=r.data[k];}else data[k]=el?.value?.trim()||"";}
@@ -312,14 +336,11 @@ async function shareCurrentDay(){
  toast("Reporte del día copiado. Puedes pegarlo en WhatsApp.");
 }
 function openDrawer(){
- $("#drawer").classList.add("open");
- $("#drawerBackdrop").classList.remove("hidden");
- $("#drawer").setAttribute("aria-hidden","false");
+ pushView("drawer");$("#drawer").classList.add("open");$("#drawerBackdrop").classList.remove("hidden");$("#drawer").setAttribute("aria-hidden","false");
 }
-function closeDrawer(){
- $("#drawer").classList.remove("open");
- $("#drawerBackdrop").classList.add("hidden");
- $("#drawer").setAttribute("aria-hidden","true");
+function closeDrawer(fromPop=false){
+ $("#drawer").classList.remove("open");$("#drawerBackdrop").classList.add("hidden");$("#drawer").setAttribute("aria-hidden","true");
+ if(!fromPop&&history.state?.view==="drawer")history.back();
 }
 $("#menuBtn").onclick=openDrawer;
 $("#closeDrawer").onclick=closeDrawer;
@@ -327,14 +348,13 @@ $("#drawerBackdrop").onclick=closeDrawer;
 
 function openAreaModal(){
  $("#areaInput").value=currentArea;
- $("#areaModal").classList.remove("hidden");
- closeDrawer();
+ if(history.state?.view==="drawer")replaceView("area");else pushView("area");
+ closeDrawer(true);$("#areaModal").classList.remove("hidden");
 }
 function openGuardModal(){
  $("#guardNameInput").value=guardName;
- $("#guardModal").classList.remove("hidden");
- closeDrawer();
- $("#guardNameInput").focus();
+ if(history.state?.view==="drawer")replaceView("guard");else pushView("guard");
+ closeDrawer(true);$("#guardModal").classList.remove("hidden");$("#guardNameInput").focus();
 }
 $("#quickAreaBtn").onclick=openAreaModal;
 $("#drawerArea").onclick=openAreaModal;
@@ -347,26 +367,47 @@ $("#drawerToday").onclick=()=>{
 };
 $("#drawerHistory").onclick=()=>{openHistory();closeDrawer()};
 $("#drawerShare").onclick=()=>{shareCurrentDay();closeDrawer()};
+$("#drawerExport").onclick=()=>{exportBackup();closeDrawer()};
+$("#drawerImport").onclick=()=>{closeDrawer();$("#backupFileInput").value="";$("#backupFileInput").click()};
+$("#backupFileInput").onchange=e=>{const file=e.target.files?.[0];if(file)importBackupFile(file)};
 
-$("#closeAreaModal").onclick=()=>$("#areaModal").classList.add("hidden");
+$("#closeAreaModal").onclick=()=>closeAreaModal();
+function closeAreaModal(fromPop=false){$("#areaModal").classList.add("hidden");if(!fromPop&&history.state?.view==="area")history.back();}
 $("#saveAreaBtn").onclick=()=>{
  const a=$("#areaInput").value.trim();
  if(!a)return toast("Escribe un área");
  currentArea=a;localStorage.setItem(AREA_KEY,a);setArea();
- $("#areaModal").classList.add("hidden");toast("Área actualizada");
+ closeAreaModal(true);replaceView("base");toast("Área actualizada");
 };
 
-$("#closeGuardModal").onclick=()=>$("#guardModal").classList.add("hidden");
+$("#closeGuardModal").onclick=()=>closeGuardModal();
+function closeGuardModal(fromPop=false){$("#guardModal").classList.add("hidden");if(!fromPop&&history.state?.view==="guard")history.back();}
 $("#saveGuardBtn").onclick=()=>{
  const n=$("#guardNameInput").value.trim();
  if(!n)return toast("Escribe el nombre del guardia");
  guardName=n;localStorage.setItem(GUARD_KEY,n);setGuard();
- $("#guardModal").classList.add("hidden");toast("Guardia configurado");
+ closeGuardModal(true);replaceView("base");toast("Guardia configurado");
  if(pendingQuickType){
    const t=pendingQuickType; pendingQuickType=null;
    setTimeout(()=>openForm(t),120);
  }
 };
+
+function exportBackup(){
+ const payload={app:"Bitácora de Guardia",schemaVersion:4,exportedAt:nowISO(),currentArea,guardName,selectedDate,records};
+ const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+ a.href=url;a.download=`bitacora_guardia_respaldo_${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast("Respaldo exportado correctamente");
+}
+async function importBackupFile(file){
+ try{
+  const payload=JSON.parse(await file.text());
+  if(!payload||payload.app!=="Bitácora de Guardia"||!Array.isArray(payload.records))throw new Error();
+  if(!confirm(`El respaldo contiene ${payload.records.length} registros. ¿Quieres reemplazar los datos actuales por este respaldo?`))return;
+  records=payload.records;currentArea=String(payload.currentArea||"Urgencias");guardName=String(payload.guardName||"");selectedDate=String(payload.selectedDate||new Date().toLocaleDateString("en-CA"));
+  localStorage.setItem(KEY,JSON.stringify(records));localStorage.setItem(AREA_KEY,currentArea);localStorage.setItem(GUARD_KEY,guardName);
+  $("#dateFilter").value=selectedDate;setArea();setGuard();render();toast("Respaldo importado correctamente");
+ }catch(e){toast("No se pudo importar: archivo inválido")}
+}
 
 function openHistory(){
  const days=[...new Set(records.map(r=>new Date(r.createdAt).toLocaleDateString("en-CA")))].sort().reverse();
@@ -390,6 +431,13 @@ $("#nextDayBtn").onclick=()=>{
  selectedDate=d.toLocaleDateString("en-CA");$("#dateFilter").value=selectedDate;$("#searchInput").value="";render();
 };
 
+window.addEventListener("popstate",e=>{
+ const view=e.state?.bitacora?e.state.view:"base";hideAllOverlays();
+ if(view==="drawer"){$("#drawer").classList.add("open");$("#drawerBackdrop").classList.remove("hidden")}
+ if(view==="area")$("#areaModal").classList.remove("hidden");
+ if(view==="guard")$("#guardModal").classList.remove("hidden");
+ if(view==="record")$("#modal").classList.remove("hidden");
+});
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstall=e;$("#installBtn").classList.remove("hidden")});
 $("#installBtn")?.addEventListener("click",async()=>{if(!deferredInstall)return;deferredInstall.prompt();deferredInstall=null});
 

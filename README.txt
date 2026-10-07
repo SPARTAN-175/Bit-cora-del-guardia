@@ -44,3 +44,6 @@ v0.3.3: Corrección del error de consola causado por referencias a botones elimi
 
 
 v0.3.4: CORRECCIÓN CRÍTICA DE COMPARTIR. Los Data URL/Base64 de las fotografías ya nunca se incluyen en el texto del reporte. Una fotografía se comparte como archivo de imagen normal; si hay varias, se combinan en un único archivo para reducir problemas de WhatsApp. El texto enviado queda completamente limpio y legible.
+
+
+v0.4.0: Entrada/salida reemplaza el nombre Incidencia; las tarjetas se abren al tocarlas; las salidas tienen botón para registrar automáticamente la hora de regreso; se agregó historial de navegación con botón Atrás; se agregó exportación/importación de respaldo JSON con configuración, registros y fotografías.

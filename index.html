@@ -24,6 +24,10 @@
   <button class="drawer-item" id="drawerToday">📅 <span>Registros de hoy</span></button>
   <button class="drawer-item" id="drawerHistory">🗂️ <span>Historial por día</span></button>
   <button class="drawer-item" id="drawerShare">📤 <span>Compartir guardia</span></button>
+  <div class="drawer-separator"></div>
+  <button class="drawer-item" id="drawerExport">💾 <span>Exportar respaldo</span></button>
+  <button class="drawer-item" id="drawerImport">📥 <span>Importar respaldo</span></button>
+  <input id="backupFileInput" type="file" accept="application/json,.json" hidden>
   <div class="drawer-separator"></div><p class="drawer-note">Todo se guarda localmente en este dispositivo.</p>
 </aside>
 
@@ -38,7 +42,7 @@
     <button class="quick-card" data-type="internamiento">🛏️<strong>Internamiento</strong><small>Paciente + responsable</small></button>
     <button class="quick-card" data-type="vehiculo">🚗<strong>Vehículo</strong><small>Acceso / salida</small></button>
     <button class="quick-card" data-type="ambulancia">🚑<strong>Ambulancia</strong><small>Traslado de paciente</small></button>
-    <button class="quick-card" data-type="incidencia">📋<strong>Incidencia</strong><small>Entrada / salida / nota</small></button>
+    <button class="quick-card" data-type="incidencia">📋<strong>Entrada / salida</strong><small>Control de acceso</small></button>
     <button class="quick-card" data-type="nota">📝<strong>Nota libre</strong><small>Cualquier situación</small></button>
   </section>
 
