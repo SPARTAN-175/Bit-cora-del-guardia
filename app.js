@@ -123,7 +123,7 @@ function fieldHTML(f){
  if(type==="photo") return `<div class="full-col photo-picker"><span class="field-label">${label}</span><div class="photo-buttons"><button type="button" class="secondary photo-action" id="cam_${id}">📷 Tomar foto</button><button type="button" class="secondary photo-action" id="gal_${id}">🖼️ Galería</button><button type="button" class="danger photo-action photo-clear" id="clear_${id}">✕ Quitar foto</button></div><input id="camfile_${id}" type="file" accept="image/*" capture="environment" hidden><input id="galfile_${id}" type="file" accept="image/*" hidden><div id="preview_${id}" class="photo-preview"></div><small class="photo-help">La foto puede incluir fecha/hora y ubicación si el dispositivo la proporciona. Si no hay conexión o ubicación, funciona normalmente.</small></div>`;
  if(type==="patientList") return `<div class="full-col repeat-section"><div class="repeat-head"><div><span class="field-label">👤 ${label}${required?" *":""}</span><small class="photo-help">Agrega todos los pacientes sin mezclar sus datos.</small></div><button type="button" class="secondary add-repeat" id="addPatientBtn">＋ Agregar paciente</button></div><div id="patientsList"></div></div>`;
  if(type==="companionList") return `<div class="full-col repeat-section"><div class="repeat-head"><div><span class="field-label">👥 ${label}</span><small class="photo-help">Cada acompañante queda relacionado con un paciente.</small></div><button type="button" class="secondary add-repeat" id="addCompanionBtn">＋ Agregar acompañante</button></div><div id="companionsList"></div></div>`;
- if(type==="timeToggle") return `<div class="time-toggle-wrap"><span class="field-label">${label}</span><button type="button" class="secondary time-toggle" id="time_${id}" data-field="${id}">🕐 Registrar hora</button><small id="time_help_${id}" class="photo-help">Toca para registrar la hora actual. Si ya está registrada, toca para quitarla.</small></div>`;
+ if(type==="timeToggle") return `<div class="time-toggle-wrap"><span class="field-label">${label}</span><input id="f_${id}" type="hidden" value=""><button type="button" class="secondary time-toggle" id="time_${id}" data-field="${id}">🕐 Registrar hora</button><small id="time_help_${id}" class="photo-help">Toca para registrar la hora actual. Si ya está registrada, toca para quitarla.</small></div>`;
  if(type==="select") return `<label>${label}${required?" *":""}<select id="f_${id}" ${required?"required":""}><option value="">Seleccionar…</option>${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></label>`;
  return `<label>${label}${required?" *":""}<input id="f_${id}" type="${type}" ${required?"required":""} ${type==="number"?"min=0 max=130":""} placeholder="${label}"></label>`;
 }
@@ -146,22 +146,42 @@ function renderCompanions(){
  wireRepeatInputs();
 }
 function wireRepeatInputs(){
- document.querySelectorAll("[data-patient]").forEach(el=>el.oninput=()=>{repeatState.patients[+el.dataset.patient][el.dataset.key]=el.value});
- document.querySelectorAll("[data-companion]").forEach(el=>{el.oninput=()=>{const i=+el.dataset.companion;repeatState.companions[i][el.dataset.key]=el.value;if(el.dataset.key==="parentesco")renderCompanions()}});
- document.querySelectorAll("[data-remove-patient]").forEach(b=>b.onclick=()=>{repeatState.patients.splice(+b.dataset.removePatient,1);renderPatients()});
+ document.querySelectorAll("[data-patient]").forEach(el=>{
+   const handler=()=>{repeatState.patients[+el.dataset.patient][el.dataset.key]=el.value};
+   el.oninput=handler; el.onchange=handler;
+ });
+ document.querySelectorAll("[data-companion]").forEach(el=>{
+   const handler=()=>{
+     const i=+el.dataset.companion;
+     repeatState.companions[i][el.dataset.key]=el.value;
+     if(el.dataset.key==="parentesco"){
+       const scrollY=window.scrollY;
+       renderCompanions();
+       requestAnimationFrame(()=>window.scrollTo(0,scrollY));
+     }
+   };
+   el.oninput=handler; el.onchange=handler;
+ });
+ document.querySelectorAll("[data-remove-patient]").forEach(b=>b.onclick=()=>{repeatState.patients.splice(+b.dataset.removePatient,1);if(!repeatState.patients.length)repeatState.patients.push(blankPatient());renderPatients()});
  document.querySelectorAll("[data-remove-companion]").forEach(b=>b.onclick=()=>{repeatState.companions.splice(+b.dataset.removeCompanion,1);renderCompanions()});
  document.querySelectorAll("[data-repeat-cam],[data-repeat-gal],[data-repeat-clear]").forEach(btn=>{
    const key=btn.dataset.repeatCam||btn.dataset.repeatGal||btn.dataset.repeatClear;
    const cam=$("#repeat_cam_"+key),gal=$("#repeat_gal_"+key),preview=$("#repeat_preview_"+key);
    if(btn.dataset.repeatCam)btn.onclick=()=>cam.click();
    if(btn.dataset.repeatGal)btn.onclick=()=>gal.click();
-   if(btn.dataset.repeatClear)btn.onclick=()=>{photoFiles[key]=null;photoCleared[key]=true;preview.innerHTML=""};
-   const choose=file=>{if(!file)return;photoFiles[key]=file;photoCleared[key]=false;preview.innerHTML="<span class=\"photo-help\">Foto seleccionada</span>"};
-   cam.onchange=e=>choose(e.target.files?.[0]);gal.onchange=e=>choose(e.target.files?.[0]);
+   if(btn.dataset.repeatClear)btn.onclick=()=>{photoFiles[key]=null;photoCleared[key]=true;if(cam)cam.value="";if(gal)gal.value="";preview.innerHTML=""};
+   const choose=file=>{
+     if(!file)return;
+     photoFiles[key]=file;photoCleared[key]=false;
+     preview.innerHTML="";
+     const img=document.createElement("img");img.alt="Foto de identificación";img.src=URL.createObjectURL(file);preview.appendChild(img);
+   };
+   if(cam)cam.onchange=e=>choose(e.target.files?.[0]);
+   if(gal)gal.onchange=e=>choose(e.target.files?.[0]);
  });
 }
 function setupTimeToggles(){
- ["horaSalidaAmb"].forEach(id=>{const b=$("#time_"+id);if(!b)return;b.onclick=()=>{const current=$("#f_"+id)?.value;if(current){$("#f_"+id).value="";b.textContent="🕐 Registrar hora";}else{const now=new Date();const t=new Intl.DateTimeFormat("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false}).format(now);$("#f_"+id).value=t;b.textContent=`🕐 ${t}`;}}});
+ ["horaSalidaAmb"].forEach(id=>{const b=$("#time_"+id),input=$("#f_"+id);if(!b||!input)return;b.onclick=()=>{const current=input.value;if(current){input.value="";b.textContent="🕐 Registrar hora";}else{const now=new Date();const t=new Intl.DateTimeFormat("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false}).format(now);input.value=t;b.textContent=`🕐 ${t}`;}}});
 }
 
 function setupPhotoPickers(fields, resetState=true){
