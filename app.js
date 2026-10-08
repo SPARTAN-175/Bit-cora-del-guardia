@@ -484,46 +484,64 @@ async function share(r){
  const text=shareText(r);
  const photos=photoData(r);
 
- if(navigator.share){
-   // En Android/PWA la comprobación de canShare() puede devolver false para
-   // archivos creados dinámicamente aunque navigator.share sí pueda compartirlos.
-   // Por eso intentamos primero el archivo y dejamos canShare como una ayuda,
-   // no como un bloqueo.
-   if(photos.length){
-     try{
-       const blob=await makeShareImage(r);
-       if(blob){
-         const extension=blob.type==="image/png"?"png":"jpg";
-         const file=new File([blob],`bitacora_${r.id}.${extension}`,{type:blob.type||"image/jpeg"});
-         const shareData={title:"Bitácora de guardia",text:text,files:[file]};
-         let allowed=true;
-         try{
-           if(typeof navigator.canShare==="function") allowed=navigator.canShare({files:[file]});
-         }catch(_){allowed=true}
-         // Si canShare dice que sí, o no está disponible, hacemos el intento.
-         // Algunos navegadores Android rechazan canShare() pero aceptan share().
-         if(allowed || typeof navigator.canShare!=="function"){
-           await navigator.share(shareData);
-           return;
-         }
-         // Segundo intento: algunos WebView/PWA aceptan el archivo aunque
-         // canShare haya sido conservador.
-         try{
-           await navigator.share(shareData);
-           return;
-         }catch(e2){
-           if(e2?.name==="AbortError")return;
-           console.warn("No se pudo compartir el archivo con Web Share",e2);
-         }
-       }
-     }catch(e){
-       if(e?.name==="AbortError")return;
-       console.warn("Fallo al preparar/compartir fotos",e);
+ if(navigator.share && photos.length){
+   // PRIMER INTENTO: compartir TODAS las fotografías como archivos separados.
+   // Android/WhatsApp puede aceptar varias imágenes en una sola acción de compartir.
+   try{
+     const files=[];
+     for(let i=0;i<photos.length;i++){
+       const response=await fetch(photos[i].data);
+       const blob=await response.blob();
+       if(blob && blob.size) files.push(new File([blob],`bitacora_${r.id}_${i+1}.jpg`,{type:blob.type||"image/jpeg"}));
      }
+     if(files.length===photos.length){
+       let allowed=true;
+       try{
+         if(typeof navigator.canShare==="function") allowed=navigator.canShare({files});
+       }catch(_){allowed=true}
+       if(allowed || typeof navigator.canShare!=="function"){
+         await navigator.share({title:"Bitácora de guardia",text,files});
+         return;
+       }
+     }
+   }catch(e){
+     if(e?.name==="AbortError")return;
+     console.warn("No se pudieron compartir las fotos como archivos separados",e);
    }
 
+   // SEGUNDO INTENTO: algunos Android/WebView no aceptan varias imágenes.
+   // En ese caso las reunimos en UNA sola imagen, conservando todas.
    try{
-     await navigator.share({title:"Bitácora de guardia",text:text});
+     const blob=await makeShareImage(r);
+     if(blob && blob.size){
+       const file=new File([blob],`bitacora_${r.id}_fotos.jpg`,{type:blob.type||"image/jpeg"});
+       let allowed=true;
+       try{
+         if(typeof navigator.canShare==="function") allowed=navigator.canShare({files:[file]});
+       }catch(_){allowed=true}
+       if(allowed || typeof navigator.canShare!=="function"){
+         await navigator.share({title:"Bitácora de guardia",text,files:[file]});
+         return;
+       }
+     }
+   }catch(e){
+     if(e?.name==="AbortError")return;
+     console.warn("No se pudo compartir la imagen unificada",e);
+   }
+
+   // Último intento: compartir solo el texto para no bloquear el reporte.
+   try{
+     await navigator.share({title:"Bitácora de guardia",text});
+     toast(`Texto compartido. Se detectaron ${photos.length} fotos, pero Android no permitió adjuntarlas.`,"warning");
+     return;
+   }catch(e){
+     if(e?.name==="AbortError")return;
+   }
+ }
+
+ if(navigator.share){
+   try{
+     await navigator.share({title:"Bitácora de guardia",text});
      return;
    }catch(e){
      if(e?.name==="AbortError")return;

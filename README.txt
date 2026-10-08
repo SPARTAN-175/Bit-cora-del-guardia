@@ -83,3 +83,6 @@ v0.5.5 — Corrección del botón Agregar acompañante: ahora se gestiona por de
 
 
 v0.5.7: mejora del envío de fotografías por Web Share, incluyendo fotos de pacientes y acompañantes anidadas.
+
+
+v0.5.8: compartir todas las fotos de un registro; intenta múltiples archivos y usa imagen unificada como respaldo.
