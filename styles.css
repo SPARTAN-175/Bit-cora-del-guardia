@@ -38,7 +38,9 @@ textarea{min-height:90px;resize:vertical}.check{display:flex;gap:8px;align-items
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0 12px}.full-col{grid-column:1/-1}
 .form-actions{display:flex;gap:8px;margin-top:15px}.form-actions button{flex:1}
 .danger{background:#fff0ef!important;color:var(--danger)!important}
-.toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,20px);opacity:0;background:#17312f;color:#fff;padding:11px 15px;border-radius:12px;z-index:50;transition:.2s;pointer-events:none;font-size:13px}.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,20px) scale(.97);opacity:0;background:#17312f;color:#fff;padding:10px 14px;border-radius:13px;z-index:100;transition:opacity .2s ease,transform .2s ease;pointer-events:none;font-size:13px;font-weight:700;display:flex;align-items:center;gap:9px;max-width:min(92vw,430px);box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.toast.show{opacity:1;transform:translate(-50%,0) scale(1)}
+.toast-icon{width:23px;height:23px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.18);font-size:14px;flex:0 0 auto}.toast-text{line-height:1.25}.toast-success{background:#176b58}.toast-error{background:#a73535}.toast-warning{background:#8a650e}.toast-info{background:#245b78}
 @media(min-width:650px){.quick-grid{grid-template-columns:repeat(5,1fr)}.quick-card{display:block}.quick-card strong,.quick-card small{display:block;margin-top:6px}.quick-card:first-letter{font-size:28px}}
 @media(max-width:500px){.toolbar{flex-direction:column}.area-panel{align-items:flex-start;gap:10px}.form-grid{grid-template-columns:1fr}}
 
@@ -91,3 +93,20 @@ input, textarea, select, [contenteditable="true"]{
 
 .photo-clear{padding:8px 10px;font-size:11px}
 .photo-preview:empty{display:none}
+
+/* v0.5.0 — campos repetibles y horarios de ambulancia */
+.repeat-section{border:1px solid #dbe5e3;border-radius:16px;padding:12px;background:#f8fbfa}
+.repeat-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.repeat-head>div{display:flex;flex-direction:column;gap:3px}
+.add-repeat{white-space:nowrap}
+.repeat-card{background:#fff;border:1px solid #dbe5e3;border-radius:14px;padding:12px;margin-top:10px;box-shadow:0 2px 8px rgba(15,118,110,.06)}
+.repeat-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.mini-remove{padding:5px 9px;font-size:12px}
+.mini-photo{grid-column:1/-1;border-top:1px dashed #dbe5e3;padding-top:10px}
+.time-toggle-wrap{display:flex;flex-direction:column;gap:5px;padding:10px 0}
+.time-toggle{width:100%;min-height:44px}
+@media (max-width:640px){
+ .repeat-head{align-items:stretch;flex-direction:column}
+ .add-repeat{width:100%}
+ .repeat-card .form-grid{grid-template-columns:1fr}
+}

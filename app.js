@@ -24,9 +24,20 @@ const val=k=>$(k)?.value?.trim()||"";
 
 function save(){
  try{localStorage.setItem(KEY,JSON.stringify(records));render();return true}
- catch(e){console.error(e);toast("No se pudo guardar: el almacenamiento está lleno. La foto es demasiado grande.");return false}
+ catch(e){console.error(e);toast("No se pudo guardar: el almacenamiento está lleno. La foto es demasiado grande.","error");return false}
 }
-function toast(t){const x=$("#toast");x.textContent=t;x.classList.add("show");setTimeout(()=>x.classList.remove("show"),2200)}
+let toastTimer=null;
+function toast(message,type="success"){
+ const x=$("#toast");
+ if(!x)return;
+ const icons={success:"✓",error:"✕",warning:"⚠",info:"ℹ"};
+ x.className=`toast toast-${type}`;
+ x.innerHTML=`<span class="toast-icon">${icons[type]||icons.info}</span><span class="toast-text">${esc(message)}</span>`;
+ void x.offsetWidth;
+ x.classList.add("show");
+ clearTimeout(toastTimer);
+ toastTimer=setTimeout(()=>x.classList.remove("show"),2600);
+}
 function updateClock(){ $("#clock").textContent=fmt(new Date()) }
 setInterval(updateClock,1000);updateClock();
 
@@ -74,20 +85,23 @@ vehiculo:{
 ]},
 ambulancia:{
  title:"Traslado en ambulancia", fields:[
- ["destino","Destino del traslado","text",true],["ambulancia","Datos / número de ambulancia","text",false],
- ["placaAmb","Placa de la ambulancia","text",false],["choferAmb","Nombre del conductor","text",true],
- ["kmSalida","Kilometraje de salida","number",false],["combustible","Nivel de combustible","select",false,["Vacío","1/4","1/2","3/4","Lleno","No registrado"]],
- ["fotoVehiculo","Foto de kilometraje / combustible","photo",false],
- ["nombre","Nombre del paciente","text",true],["sexo","Sexo","select",true,["Femenino","Masculino","Otro / no especificado"]],
- ["edad","Edad","number",true],["procedencia","Procedencia","text",false],["idPaciente","Identificación del paciente","text",false],
- ["acompanante1","Familiar acompañante 1","text",false],["acompanante1Sexo","Sexo acompañante 1","select",false,["Femenino","Masculino","Otro / no especificado"]],
- ["acompanante1Edad","Edad acompañante 1","number",false],["acompanante1Id","Identificación acompañante 1","text",false],
- ["acompanante2","Familiar acompañante 2","text",false],["acompanante2Sexo","Sexo acompañante 2","select",false,["Femenino","Masculino","Otro / no especificado"]],
- ["acompanante2Edad","Edad acompañante 2","number",false],["acompanante2Id","Identificación acompañante 2","text",false],
- ["personal1","Personal de salud 1","text",true],["personal1Cargo","Cargo","select",false,["Enfermero/a","Médico/a","Paramédico/a","Otro"]],
- ["personal2","Personal de salud 2","text",false],["personal2Cargo","Cargo","select",false,["Enfermero/a","Médico/a","Paramédico/a","Otro"]],
+ ["destino","Destino del traslado","text",true],
+ ["horaSalidaAmb","Hora de salida de ambulancia","timeToggle",false],
+ ["horaRegresoAmb","Hora de regreso de ambulancia","timeToggle",false],
+ ["pacientes","Pacientes del traslado","patientList",true],
+ ["acompanantes","Acompañantes","companionList",false],
+ ["ambulancia","Datos / número de ambulancia","text",false],
+ ["placaAmb","Placa de la ambulancia","text",false],
+ ["choferAmb","Nombre del conductor","text",true],
+ ["kmSalida","Kilometraje de salida","number",false],
+ ["combustible","Nivel de combustible","select",false,["Vacío","1/4","1/2","3/4","Lleno","No registrado"]],
+ ["fotoVehiculo","📷 Foto de kilometraje / combustible","photo",false],
+ ["personal1","Personal de salud 1","text",true],
+ ["personal1Cargo","Cargo","select",false,["Enfermero/a","Médico/a","Paramédico/a","Otro"]],
+ ["personal2","Personal de salud 2","text",false],
+ ["personal2Cargo","Cargo","select",false,["Enfermero/a","Médico/a","Paramédico/a","Otro"]],
  ["observaciones","Observaciones del traslado","textarea",false],
- ["fotoAdicional","Foto adicional","photo",false]
+ ["fotoAdicional","📷 Foto adicional","photo",false]
 ]},
 incidencia:{
  title:"Incidencia / control de acceso", fields:[
@@ -107,9 +121,48 @@ nota:{
 function fieldHTML(f){
  const [id,label,type,required,opts]=f;
  if(type==="textarea") return `<label class="full-col">${label}${required?" *":""}<textarea id="f_${id}" ${required?"required":""} placeholder="Escribe aquí…"></textarea></label>`;
- if(type==="photo") return `<div class="full-col photo-picker"><span class="field-label">${label}</span><div class="photo-buttons"><button type="button" class="secondary photo-action" id="cam_${id}">📷 Tomar foto</button><button type="button" class="secondary photo-action" id="gal_${id}">🖼️ Galería</button><button type="button" class="danger photo-action photo-clear" id="clear_${id}">✕ Quitar foto</button></div><input id="camfile_${id}" type="file" accept="image/*" capture="environment" hidden><input id="galfile_${id}" type="file" accept="image/*" hidden><div id="preview_${id}" class="photo-preview"></div><small class="photo-help">Puedes tomar una foto ahora o elegir una que ya tengas guardada.</small></div>`;
+ if(type==="photo") return `<div class="full-col photo-picker"><span class="field-label">${label}</span><div class="photo-buttons"><button type="button" class="secondary photo-action" id="cam_${id}">📷 Tomar foto</button><button type="button" class="secondary photo-action" id="gal_${id}">🖼️ Galería</button><button type="button" class="danger photo-action photo-clear" id="clear_${id}">✕ Quitar foto</button></div><input id="camfile_${id}" type="file" accept="image/*" capture="environment" hidden><input id="galfile_${id}" type="file" accept="image/*" hidden><div id="preview_${id}" class="photo-preview"></div><small class="photo-help">La foto puede incluir fecha/hora y ubicación si el dispositivo la proporciona. Si no hay conexión o ubicación, funciona normalmente.</small></div>`;
+ if(type==="patientList") return `<div class="full-col repeat-section"><div class="repeat-head"><div><span class="field-label">👤 ${label}${required?" *":""}</span><small class="photo-help">Agrega todos los pacientes sin mezclar sus datos.</small></div><button type="button" class="secondary add-repeat" id="addPatientBtn">＋ Agregar paciente</button></div><div id="patientsList"></div></div>`;
+ if(type==="companionList") return `<div class="full-col repeat-section"><div class="repeat-head"><div><span class="field-label">👥 ${label}</span><small class="photo-help">Cada acompañante queda relacionado con un paciente.</small></div><button type="button" class="secondary add-repeat" id="addCompanionBtn">＋ Agregar acompañante</button></div><div id="companionsList"></div></div>`;
+ if(type==="timeToggle") return `<div class="time-toggle-wrap"><span class="field-label">${label}</span><button type="button" class="secondary time-toggle" id="time_${id}" data-field="${id}">🕐 Registrar hora</button><small id="time_help_${id}" class="photo-help">Toca para registrar la hora actual. Si ya está registrada, toca para quitarla.</small></div>`;
  if(type==="select") return `<label>${label}${required?" *":""}<select id="f_${id}" ${required?"required":""}><option value="">Seleccionar…</option>${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></label>`;
  return `<label>${label}${required?" *":""}<input id="f_${id}" type="${type}" ${required?"required":""} ${type==="number"?"min=0 max=130":""} placeholder="${label}"></label>`;
+}
+
+let repeatState={patients:[],companions:[]};
+function blankPatient(){return {nombre:"",sexo:"",edad:"",procedencia:"",id:"",foto:""}}
+function blankCompanion(){return {nombre:"",sexo:"",edad:"",parentesco:"",parentescoOtro:"",id:"",foto:""}}
+function repeatPhotoHTML(prefix,index,label,existing=""){
+ const key=`${prefix}${index}_foto`;
+ return `<div class="mini-photo"><span class="field-label">${label}</span><div class="photo-buttons"><button type="button" class="secondary photo-action" data-repeat-cam="${key}">📷 Foto</button><button type="button" class="secondary photo-action" data-repeat-gal="${key}">🖼️ Galería</button><button type="button" class="danger photo-action" data-repeat-clear="${key}">✕</button></div><input id="repeat_cam_${key}" type="file" accept="image/*" capture="environment" hidden><input id="repeat_gal_${key}" type="file" accept="image/*" hidden><div id="repeat_preview_${key}" class="photo-preview">${existing?`<img src="${existing}" alt="Identificación">`:""}</div></div>`;
+}
+function renderPatients(){
+ const box=$("#patientsList"); if(!box)return;
+ box.innerHTML=repeatState.patients.map((p,i)=>`<div class="repeat-card"><div class="repeat-card-head"><strong>Paciente ${i+1}</strong>${i?`<button type="button" class="danger mini-remove" data-remove-patient="${i}">Eliminar</button>`:""}</div><div class="form-grid"><label>Nombre *<input data-patient="${i}" data-key="nombre" value="${esc(p.nombre)}" placeholder="Nombre del paciente"></label><label>Sexo<select data-patient="${i}" data-key="sexo"><option value="">Seleccionar…</option>${["Femenino","Masculino","Otro / no especificado"].map(o=>`<option ${p.sexo===o?"selected":""}>${o}</option>`).join("")}</select></label><label>Edad<input type="number" min="0" max="130" data-patient="${i}" data-key="edad" value="${esc(p.edad)}"></label><label>Procedencia<input data-patient="${i}" data-key="procedencia" value="${esc(p.procedencia)}"></label><label class="full-col">Identificación<input data-patient="${i}" data-key="id" value="${esc(p.id)}" placeholder="INE, CURP, pasaporte, etc."></label>${repeatPhotoHTML("p",i,"📷 Foto de identificación",p.foto)}</div></div>`).join("");
+ wireRepeatInputs();
+}
+function renderCompanions(){
+ const box=$("#companionsList"); if(!box)return;
+ box.innerHTML=repeatState.companions.map((c,i)=>`<div class="repeat-card"><div class="repeat-card-head"><strong>Acompañante ${i+1}</strong><button type="button" class="danger mini-remove" data-remove-companion="${i}">Eliminar</button></div><div class="form-grid"><label>Nombre<input data-companion="${i}" data-key="nombre" value="${esc(c.nombre)}" placeholder="Nombre del acompañante"></label><label>Sexo<select data-companion="${i}" data-key="sexo"><option value="">Seleccionar…</option>${["Femenino","Masculino","Otro / no especificado"].map(o=>`<option ${c.sexo===o?"selected":""}>${o}</option>`).join("")}</select></label><label>Edad<input type="number" min="0" max="130" data-companion="${i}" data-key="edad" value="${esc(c.edad)}"></label><label>Parentesco<select data-companion="${i}" data-key="parentesco" class="parentesco-select"><option value="">Seleccionar…</option>${["Padre","Madre","Esposo/a","Hijo/a","Hermano/a","Abuelo/a","Tío/a","Primo/a","Otro"].map(o=>`<option ${c.parentesco===o?"selected":""}>${o}</option>`).join("")}</select></label>${c.parentesco==="Otro"?`<label>Especifique parentesco<input data-companion="${i}" data-key="parentescoOtro" value="${esc(c.parentescoOtro)}" placeholder="Ej. vecino, amigo…"></label>`:""}<label class="full-col">Identificación<input data-companion="${i}" data-key="id" value="${esc(c.id)}" placeholder="INE, CURP, etc."></label>${repeatPhotoHTML("c",i,"📷 Foto de identificación",c.foto)}</div></div>`).join("");
+ wireRepeatInputs();
+}
+function wireRepeatInputs(){
+ document.querySelectorAll("[data-patient]").forEach(el=>el.oninput=()=>{repeatState.patients[+el.dataset.patient][el.dataset.key]=el.value});
+ document.querySelectorAll("[data-companion]").forEach(el=>{el.oninput=()=>{const i=+el.dataset.companion;repeatState.companions[i][el.dataset.key]=el.value;if(el.dataset.key==="parentesco")renderCompanions()}});
+ document.querySelectorAll("[data-remove-patient]").forEach(b=>b.onclick=()=>{repeatState.patients.splice(+b.dataset.removePatient,1);renderPatients()});
+ document.querySelectorAll("[data-remove-companion]").forEach(b=>b.onclick=()=>{repeatState.companions.splice(+b.dataset.removeCompanion,1);renderCompanions()});
+ document.querySelectorAll("[data-repeat-cam],[data-repeat-gal],[data-repeat-clear]").forEach(btn=>{
+   const key=btn.dataset.repeatCam||btn.dataset.repeatGal||btn.dataset.repeatClear;
+   const cam=$("#repeat_cam_"+key),gal=$("#repeat_gal_"+key),preview=$("#repeat_preview_"+key);
+   if(btn.dataset.repeatCam)btn.onclick=()=>cam.click();
+   if(btn.dataset.repeatGal)btn.onclick=()=>gal.click();
+   if(btn.dataset.repeatClear)btn.onclick=()=>{photoFiles[key]=null;photoCleared[key]=true;preview.innerHTML=""};
+   const choose=file=>{if(!file)return;photoFiles[key]=file;photoCleared[key]=false;preview.innerHTML="<span class=\"photo-help\">Foto seleccionada</span>"};
+   cam.onchange=e=>choose(e.target.files?.[0]);gal.onchange=e=>choose(e.target.files?.[0]);
+ });
+}
+function setupTimeToggles(){
+ ["horaSalidaAmb","horaRegresoAmb"].forEach(id=>{const b=$("#time_"+id);if(!b)return;b.onclick=()=>{const current=$("#f_"+id)?.value;if(current){$("#f_"+id).value="";b.textContent="🕐 Registrar hora";}else{const now=new Date();const t=new Intl.DateTimeFormat("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false}).format(now);$("#f_"+id).value=t;b.textContent=`🕐 ${t}`;}}});
 }
 
 function setupPhotoPickers(fields, resetState=true){
@@ -125,6 +178,7 @@ function setupPhotoPickers(fields, resetState=true){
 }
 
 function openForm(type,useHistory=true){
+ editingId=null;
  editingRecordId=null;
  photoFiles={};photoCleared={};
  const cfg=forms[type]; if(useHistory)pushView("record"); $("#modalTitle").textContent=cfg.title;
@@ -132,20 +186,45 @@ function openForm(type,useHistory=true){
  $("#recordForm").innerHTML=`<div class="form-grid">${cfg.fields.map(fieldHTML).join("")}</div>
  <div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">💾 Guardar registro</button></div>`;
  $("#modal").classList.remove("hidden");$("#modal").setAttribute("aria-hidden","false");
- $("#recordForm").dataset.type=type;setupPhotoPickers(cfg.fields);$("#f_nombre")?.focus();$("#cancelForm").onclick=closeModal;
+ $("#recordForm").dataset.type=type;setupPhotoPickers(cfg.fields);
+ if(type==="ambulancia"){repeatState={patients:[blankPatient()],companions:[]};renderPatients();renderCompanions();$("#addPatientBtn").onclick=()=>{repeatState.patients.push(blankPatient());renderPatients()};$("#addCompanionBtn").onclick=()=>{repeatState.companions.push(blankCompanion());renderCompanions()};setupTimeToggles();}
+ $("#f_nombre")?.focus();$("#cancelForm").onclick=closeModal;
 }
 
-function closeModal(fromPop=false){$("#modal").classList.add("hidden");$("#modal").setAttribute("aria-hidden","true");if(!fromPop&&history.state?.view==="record")history.back()}
+function closeModal(fromPop=false){$("#modal").classList.add("hidden");$("#modal").setAttribute("aria-hidden","true");if(!fromPop&&history.state?.view==="record")replaceView("base")}
 document.querySelectorAll(".quick-card").forEach(b=>b.onclick=()=>{
  if(!guardName){pendingQuickType=b.dataset.type;$("#guardNameInput").value="";$("#guardModal").classList.remove("hidden");$("#guardNameInput").focus();return;}
  openForm(b.dataset.type);
 });
 $("#closeModal").onclick=closeModal;
+async function prepareRepeatedPeople(list,prefix){
+ const out=[];
+ for(let i=0;i<list.length;i++){
+   const x=list[i];
+   const isComp=prefix==="c";
+   const hasAny=Object.entries(x).some(([k,v])=>k!=="foto"&&String(v||"").trim());
+   if(!hasAny)continue;
+   const item={...x};
+   const key=`${prefix}${i}_foto`;
+   if(photoFiles[key]) item.foto=await compressImage(photoFiles[key]);
+   else if(editingRecordId && !photoCleared[key]){const old=records.find(r=>r.id===editingRecordId);const oldList=old?.data?.[isComp?"acompanantes":"pacientes"]||[];if(oldList[i]?.foto)item.foto=oldList[i].foto;}
+   if(isComp && item.parentesco==="Otro")item.parentesco=item.parentescoOtro||"Otro";
+   delete item.parentescoOtro;
+   out.push(item);
+ }
+ return out;
+}
 $("#recordForm").onsubmit=async e=>{
  e.preventDefault();
  if(!guardName){pendingQuickType=e.currentTarget.dataset.type;closeModal();openGuardModal();return}
  const type=e.currentTarget.dataset.type,cfg=forms[type],data={};
+ if(type==="ambulancia"){
+   if(!repeatState.patients.length || !repeatState.patients[0].nombre.trim())return toast("Agrega al menos un paciente","warning");
+   data.pacientes=await prepareRepeatedPeople(repeatState.patients,"p","Paciente");
+   data.acompanantes=await prepareRepeatedPeople(repeatState.companions,"c","Acompañante");
+ }
  for(const [id,,fieldType] of cfg.fields){
+   if(fieldType==="patientList"||fieldType==="companionList")continue;
    const el=$("#f_"+id);
    if(fieldType==="photo"){
      if(photoFiles[id]) data[id]=await compressImage(photoFiles[id]);
@@ -172,18 +251,38 @@ function summary(r){
 }
 function typeName(t){return {paciente:"Paciente",internamiento:"Internamiento",vehiculo:"Vehículo",ambulancia:"Traslado en ambulancia",incidencia:"Entrada / salida",nota:"Nota"}[t]}
 
+function getPhotoLocation(){
+ return new Promise(resolve=>{
+   if(!navigator.geolocation)return resolve("");
+   navigator.geolocation.getCurrentPosition(pos=>resolve(`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`),()=>resolve(""),{enableHighAccuracy:true,timeout:2500,maximumAge:60000});
+ });
+}
 function compressImage(file){
- return new Promise((resolve,reject)=>{
-   const reader=new FileReader();
-   reader.onload=()=>{
-     const img=new Image();
-     img.onload=()=>{
-       const max=900, scale=Math.min(1,max/Math.max(img.width,img.height));
-       const c=document.createElement("canvas");c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);
-       c.getContext("2d").drawImage(img,0,0,c.width,c.height);
-       resolve(c.toDataURL("image/jpeg",.58));
-     }; img.onerror=reject; img.src=reader.result;
-   };reader.onerror=reject;reader.readAsDataURL(file);
+ return new Promise(async (resolve,reject)=>{
+   try{
+     const reader=new FileReader();
+     reader.onload=async()=>{
+       try{
+         const img=new Image();
+         img.onload=async()=>{
+           const max=900, scale=Math.min(1,max/Math.max(img.width,img.height));
+           const footer=82;
+           const c=document.createElement("canvas");c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale)+footer;
+           const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
+           ctx.drawImage(img,0,0,c.width,c.height-footer);
+           const location=await getPhotoLocation();
+           const when=new Date();
+           ctx.fillStyle="#fff";ctx.fillRect(0,c.height-footer,c.width,footer);
+           ctx.fillStyle="#111";ctx.font="bold 18px Arial";ctx.fillText("Bitácora de Guardia",18,c.height-footer+25);
+           ctx.font="15px Arial";ctx.fillText(`Fecha/hora: ${fmt(when)}`,18,c.height-footer+47);
+           ctx.fillText(location?`Ubicación GPS: ${location}`:"Ubicación GPS: no disponible",18,c.height-footer+68);
+           resolve(c.toDataURL("image/jpeg",.58));
+         };
+         img.onerror=reject;img.src=reader.result;
+       }catch(e){reject(e)}
+     };
+     reader.onerror=reject;reader.readAsDataURL(file);
+   }catch(e){reject(e)}
  });
 }
 function photoData(r){
@@ -200,7 +299,7 @@ function shareText(r){
  ];
  if(r.type==="incidencia" && r.data.tipoMovimiento==="Salida") lines.push(r.returnedAt?`↩️ Regreso: ${fmt(r.returnedAt)}`:`↩️ Regreso: Pendiente`);
  const labels={
-  destino:"Destino del traslado",ambulancia:"Ambulancia",placaAmb:"Placa de ambulancia",choferAmb:"Conductor",
+  destino:"Destino del traslado",horaSalidaAmb:"Hora de salida de ambulancia",horaRegresoAmb:"Hora de regreso de ambulancia",ambulancia:"Ambulancia",placaAmb:"Placa de ambulancia",choferAmb:"Conductor",
   kmSalida:"Kilometraje de salida",combustible:"Nivel de combustible",
   nombre:"Paciente",sexo:"Sexo",edad:"Edad",procedencia:"Procedencia",acompanante:"Acompañante",
   acompananteSexo:"Sexo del acompañante",acompananteEdad:"Edad del acompañante",idPaciente:"Identificación del paciente",
@@ -215,9 +314,21 @@ function shareText(r){
   pertenencias:"Objetos / pertenencias",titulo:"Asunto",nota:"Nota",observaciones:"Observaciones"
  };
 
+ // Los pacientes y acompañantes se reportan por separado para no mezclar datos.
+ if(r.type==="ambulancia"){
+   (d.pacientes||[]).forEach((p,i)=>{
+     lines.push(`👤 Paciente ${i+1}: ${p.nombre||"—"}`);
+     if(p.sexo)lines.push(`  • Sexo: ${p.sexo}`); if(p.edad)lines.push(`  • Edad: ${p.edad}`); if(p.procedencia)lines.push(`  • Procedencia: ${p.procedencia}`); if(p.id)lines.push(`  • Identificación: ${p.id}`);
+   });
+   (d.acompanantes||[]).forEach((c,i)=>{
+     lines.push(`👥 Acompañante ${i+1}: ${c.nombre||"—"}`);
+     if(c.parentesco)lines.push(`  • Parentesco: ${c.parentesco}`); if(c.sexo)lines.push(`  • Sexo: ${c.sexo}`); if(c.edad)lines.push(`  • Edad: ${c.edad}`); if(c.id)lines.push(`  • Identificación: ${c.id}`);
+   });
+ }
  // IMPORTANTÍSIMO: los campos de fotografía se guardan como Data URL,
  // pero JAMÁS se incluyen en el texto del reporte.
  Object.entries(d).forEach(([k,v])=>{
+   if(k==="pacientes"||k==="acompanantes")return;
    if(!v)return;
    if(k.toLowerCase().includes("foto"))return;
    if(typeof v==="string" && v.startsWith("data:image/"))return;
@@ -344,8 +455,10 @@ window.editById=id=>{
  editingRecordId=r.id;
  openForm(r.type,!(history.state?.view==="record"));
  editingRecordId=r.id;
- forms[r.type].fields.forEach(([k,,ft])=>{const el=$("#f_"+k);if(el&&ft!=="photo")el.value=r.data[k]||""});
+ forms[r.type].fields.forEach(([k,,ft])=>{const el=$("#f_"+k);if(el&&ft!=="photo"&&ft!=="patientList"&&ft!=="companionList"&&ft!=="timeToggle")el.value=r.data[k]||""});
  setupPhotoPickers(forms[r.type].fields,false);
+ if(r.type==="ambulancia"){repeatState={patients:(r.data.pacientes||[]).map(x=>({...blankPatient(),...x})),companions:(r.data.acompanantes||[]).map(x=>({...blankCompanion(),...x}))};if(!repeatState.patients.length)repeatState.patients=[blankPatient()];renderPatients();renderCompanions();$("#addPatientBtn").onclick=()=>{repeatState.patients.push(blankPatient());renderPatients()};$("#addCompanionBtn").onclick=()=>{repeatState.companions.push(blankCompanion());renderCompanions()};setupTimeToggles();["horaSalidaAmb","horaRegresoAmb"].forEach(id=>{const b=$("#time_"+id),v=r.data[id];if(v){$("#f_"+id).value=v;b.textContent=`🕐 ${v}`}});}
+
  forms[r.type].fields.forEach(([k,,ft])=>{if(ft==="photo"&&r.data[k]){const preview=$("#preview_"+k);if(preview)preview.innerHTML=`<img src="${r.data[k]}" alt="Foto guardada">`}});
 };
 
@@ -355,7 +468,7 @@ $("#dateFilter").onchange=()=>{selectedDate=$("#dateFilter").value;$("#searchInp
 async function shareCurrentDay(){
  const date=$("#dateFilter")?.value||selectedDate;
  const dayRecords=records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===date);
- if(!dayRecords.length)return toast("No hay registros para compartir de este día");
+ if(!dayRecords.length)return toast("No hay registros para compartir de este día","warning");
  const guards=[...new Set(dayRecords.map(r=>r.guard||"Sin configurar"))];
  const text=["🏥 BITÁCORA DE GUARDIA",`📅 Día: ${date}`,`👮 Guardia(s): ${guards.join(", ")}`,`📍 Registros: ${dayRecords.length}`,"━━━━━━━━━━━━━━━━━━",...dayRecords.slice().reverse().map(shareText)].join("\n\n");
  if(navigator.share){try{await navigator.share({title:`Bitácora ${date}`,text});return}catch(e){if(e?.name==="AbortError")return}}
@@ -433,12 +546,12 @@ async function importBackupFile(file){
   records=payload.records;currentArea=String(payload.currentArea||"Urgencias");guardName=String(payload.guardName||"");selectedDate=String(payload.selectedDate||new Date().toLocaleDateString("en-CA"));
   localStorage.setItem(KEY,JSON.stringify(records));localStorage.setItem(AREA_KEY,currentArea);localStorage.setItem(GUARD_KEY,guardName);
   $("#dateFilter").value=selectedDate;setArea();setGuard();render();toast("Respaldo importado correctamente");
- }catch(e){toast("No se pudo importar: archivo inválido")}
+ }catch(e){toast("No se pudo importar: archivo inválido","error")}
 }
 
 function openHistory(){
  const days=[...new Set(records.map(r=>new Date(r.createdAt).toLocaleDateString("en-CA")))].sort().reverse();
- if(!days.length)return toast("Todavía no hay días guardados");
+ if(!days.length)return toast("Todavía no hay días guardados","warning");
  const chosen=prompt(
    "Escribe la fecha que deseas consultar (AAAA-MM-DD):\n\n"+
    days.map(d=>`${d} · ${records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===d).length} registros`).join("\n"),

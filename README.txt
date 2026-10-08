@@ -53,3 +53,18 @@ v0.4.1: Se corrigió el guardado de fotografías. Ahora la interfaz ofrece dos a
 
 
 v0.4.1b: Corrección de creación/edición: los registros nuevos siempre crean un registro independiente y ya no pueden sobrescribir accidentalmente el último. Se agregó botón ✕ Quitar foto; al editar permite conservar la foto existente, reemplazarla o eliminarla.
+
+
+v0.4.2: Corrección del flujo de guardado: después de guardar un registro nuevo el formulario se cierra y no vuelve a abrirse automáticamente con los datos anteriores. Se limpian explícitamente los estados de edición y registro pendiente. Editar conserva el ID correcto para modificar únicamente el registro seleccionado.
+
+v0.5.0
+- Traslados en ambulancia reorganizados: destino/horarios, pacientes y acompañantes primero; datos propios de la ambulancia y personal después.
+- Ambulancia: múltiples pacientes y múltiples acompañantes sin mezclar información.
+- Pacientes: identificación y foto de identificación.
+- Acompañantes: parentesco, opción Otro con texto libre, identificación y foto de identificación.
+- Ambulancia: hora de salida y hora de regreso con botón tipo interruptor: tocar registra la hora actual; tocar de nuevo la elimina y permite registrar una nueva.
+- Fotos: se añade fecha/hora y coordenadas GPS cuando el dispositivo las proporciona. Si no hay ubicación/conexión, la app sigue funcionando offline.
+- Corregido el cierre del formulario al guardar para evitar regresar a estados anteriores del historial que podían mostrar nuevamente el formulario o el menú lateral.
+
+
+v0.5.1 — Alertas internas mejoradas: mensajes de éxito, información, advertencia y error con iconos; no son notificaciones del sistema y no requieren permisos.
