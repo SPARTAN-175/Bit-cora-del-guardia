@@ -485,24 +485,44 @@ async function share(r){
  const photos=photoData(r);
 
  if(navigator.share){
-   try{
-     if(photos.length && navigator.canShare){
+   // En Android/PWA la comprobación de canShare() puede devolver false para
+   // archivos creados dinámicamente aunque navigator.share sí pueda compartirlos.
+   // Por eso intentamos primero el archivo y dejamos canShare como una ayuda,
+   // no como un bloqueo.
+   if(photos.length){
+     try{
        const blob=await makeShareImage(r);
        if(blob){
          const extension=blob.type==="image/png"?"png":"jpg";
          const file=new File([blob],`bitacora_${r.id}.${extension}`,{type:blob.type||"image/jpeg"});
-         if(navigator.canShare({files:[file]})){
-           await navigator.share({
-             title:"Bitácora de guardia",
-             text:text,
-             files:[file]
-           });
+         const shareData={title:"Bitácora de guardia",text:text,files:[file]};
+         let allowed=true;
+         try{
+           if(typeof navigator.canShare==="function") allowed=navigator.canShare({files:[file]});
+         }catch(_){allowed=true}
+         // Si canShare dice que sí, o no está disponible, hacemos el intento.
+         // Algunos navegadores Android rechazan canShare() pero aceptan share().
+         if(allowed || typeof navigator.canShare!=="function"){
+           await navigator.share(shareData);
            return;
          }
+         // Segundo intento: algunos WebView/PWA aceptan el archivo aunque
+         // canShare haya sido conservador.
+         try{
+           await navigator.share(shareData);
+           return;
+         }catch(e2){
+           if(e2?.name==="AbortError")return;
+           console.warn("No se pudo compartir el archivo con Web Share",e2);
+         }
        }
+     }catch(e){
+       if(e?.name==="AbortError")return;
+       console.warn("Fallo al preparar/compartir fotos",e);
      }
+   }
 
-     // Si el dispositivo no permite adjuntar archivos, compartir solamente texto.
+   try{
      await navigator.share({title:"Bitácora de guardia",text:text});
      return;
    }catch(e){
@@ -512,8 +532,8 @@ async function share(r){
 
  try{await navigator.clipboard?.writeText(text)}catch(_){}
  toast(photos.length
-   ?"Texto copiado. Este navegador no permite adjuntar la foto desde aquí."
-   :"Texto copiado. Puedes pegarlo en WhatsApp.");
+   ?`Texto copiado. Se detectaron ${photos.length} foto${photos.length>1?"s":""}, pero este dispositivo no permitió adjuntarlas.`
+   :"Texto copiado. Puedes pegarlo en WhatsApp.", photos.length?"warning":"info");
 }
 function toggleCardTime(id,field,label){
  const r=records.find(x=>x.id===id);

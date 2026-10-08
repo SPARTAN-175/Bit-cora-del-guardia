@@ -1,4 +1,4 @@
-Bitácora de Guardia v0.5.6
+Bitácora de Guardia v0.5.7
 
 BITÁCORA DE GUARDIA — v0.2.0
 
@@ -80,3 +80,6 @@ v0.5.4: corregidos acompañantes, vista previa de fotos de pacientes/acompañant
 
 
 v0.5.5 — Corrección del botón Agregar acompañante: ahora se gestiona por delegación de eventos para que siga funcionando después de renderizados dinámicos. No se cambia la estructura de datos existente.
+
+
+v0.5.7: mejora del envío de fotografías por Web Share, incluyendo fotos de pacientes y acompañantes anidadas.
