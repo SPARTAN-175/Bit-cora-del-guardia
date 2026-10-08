@@ -87,7 +87,6 @@ ambulancia:{
  title:"Traslado en ambulancia", fields:[
  ["destino","Destino del traslado","text",true],
  ["horaSalidaAmb","Hora de salida de ambulancia","timeToggle",false],
- ["horaRegresoAmb","Hora de regreso de ambulancia","timeToggle",false],
  ["pacientes","Pacientes del traslado","patientList",true],
  ["acompanantes","Acompañantes","companionList",false],
  ["ambulancia","Datos / número de ambulancia","text",false],
@@ -162,7 +161,7 @@ function wireRepeatInputs(){
  });
 }
 function setupTimeToggles(){
- ["horaSalidaAmb","horaRegresoAmb"].forEach(id=>{const b=$("#time_"+id);if(!b)return;b.onclick=()=>{const current=$("#f_"+id)?.value;if(current){$("#f_"+id).value="";b.textContent="🕐 Registrar hora";}else{const now=new Date();const t=new Intl.DateTimeFormat("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false}).format(now);$("#f_"+id).value=t;b.textContent=`🕐 ${t}`;}}});
+ ["horaSalidaAmb"].forEach(id=>{const b=$("#time_"+id);if(!b)return;b.onclick=()=>{const current=$("#f_"+id)?.value;if(current){$("#f_"+id).value="";b.textContent="🕐 Registrar hora";}else{const now=new Date();const t=new Intl.DateTimeFormat("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false}).format(now);$("#f_"+id).value=t;b.textContent=`🕐 ${t}`;}}});
 }
 
 function setupPhotoPickers(fields, resetState=true){
@@ -245,7 +244,7 @@ function summary(r){
  if(r.type==="paciente") return `${d.nombre||"Paciente"} · ${d.sexo||""} · ${d.edad||"?"} años${d.procedencia?" · "+d.procedencia:""}`;
  if(r.type==="internamiento") return `${d.nombre||"Paciente"} · Responsable: ${d.responsable||"—"}`;
  if(r.type==="vehiculo") return `${d.tipoVehiculo||"Vehículo"} · ${d.placa||"Sin placa"}${d.chofer?" · "+d.chofer:""}`;
- if(r.type==="ambulancia") return `Traslado a ${d.destino||"destino no indicado"} · ${d.nombre||"Paciente"}${d.choferAmb?" · Conductor: "+d.choferAmb:""}`;
+ if(r.type==="ambulancia") return `Traslado a ${d.destino||"destino no indicado"} · ${(d.pacientes||[])[0]?.nombre||"Paciente"}${d.choferAmb?" · Conductor: "+d.choferAmb:""}`;
  if(r.type==="incidencia") return `${d.tipoMovimiento||"Movimiento"} · ${d.persona||"Persona"}${d.acompanado?" · "+d.acompanado:""}${r.returnedAt?" · ↩ Regresó "+fmtTime(r.returnedAt):""}`;
  return `${d.titulo||"Nota"} · ${d.nota||""}`;
 }
@@ -298,8 +297,10 @@ function shareText(r){
   `📅 Fecha y hora: ${fmt(r.createdAt)}`
  ];
  if(r.type==="incidencia" && r.data.tipoMovimiento==="Salida") lines.push(r.returnedAt?`↩️ Regreso: ${fmt(r.returnedAt)}`:`↩️ Regreso: Pendiente`);
+ if(r.type==="ambulancia") lines.push(r.regresoAt?`↩️ Regreso de ambulancia: ${fmt(r.regresoAt)}`:(r.data.horaRegresoAmb?`↩️ Regreso de ambulancia: ${r.data.horaRegresoAmb}`:`↩️ Regreso de ambulancia: Pendiente`));
+ if(r.type==="vehiculo") lines.push(r.salidaAt?`↗️ Salida del vehículo: ${fmt(r.salidaAt)}`:`↗️ Salida del vehículo: Pendiente`);
  const labels={
-  destino:"Destino del traslado",horaSalidaAmb:"Hora de salida de ambulancia",horaRegresoAmb:"Hora de regreso de ambulancia",ambulancia:"Ambulancia",placaAmb:"Placa de ambulancia",choferAmb:"Conductor",
+  destino:"Destino del traslado",horaSalidaAmb:"Hora de salida de ambulancia",ambulancia:"Ambulancia",placaAmb:"Placa de ambulancia",choferAmb:"Conductor",
   kmSalida:"Kilometraje de salida",combustible:"Nivel de combustible",
   nombre:"Paciente",sexo:"Sexo",edad:"Edad",procedencia:"Procedencia",acompanante:"Acompañante",
   acompananteSexo:"Sexo del acompañante",acompananteEdad:"Edad del acompañante",idPaciente:"Identificación del paciente",
@@ -410,13 +411,20 @@ async function share(r){
    ?"Texto copiado. Este navegador no permite adjuntar la foto desde aquí."
    :"Texto copiado. Puedes pegarlo en WhatsApp.");
 }
-function markReturnById(id){
+function toggleCardTime(id,field,label){
  const r=records.find(x=>x.id===id);
- if(!r || r.type!=="incidencia" || r.data.tipoMovimiento!=="Salida") return;
- if(r.returnedAt) return toast(`Regreso ya registrado: ${fmtTime(r.returnedAt)}`);
- r.returnedAt=nowISO();save();toast(`↩️ Regreso registrado a las ${fmtTime(r.returnedAt)}`);
+ if(!r)return;
+ const current=field==="regresoAt" ? (r.regresoAt || r.data?.horaRegresoAmb || "") : (r[field] || "");
+ if(current){
+   if(field==="regresoAt"){delete r.regresoAt;if(r.data)delete r.data.horaRegresoAmb;}
+   else delete r[field];
+   save();toast(`🕐 ${label} eliminada`);
+ }else{
+   r[field]=nowISO();
+   save();toast(`🕐 ${label} registrada a las ${fmtTime(r[field])}`);
+ }
 }
-window.markReturnById=markReturnById;
+window.toggleCardTime=toggleCardTime;
 
 function deleteRecord(id){if(confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")){records=records.filter(r=>r.id!==id);save();toast("Registro eliminado")}}
 function render(){
@@ -434,9 +442,15 @@ function render(){
  $("#records").innerHTML=arr.map(r=>`<article class="record record-clickable" onclick="openRecordById('${r.id}')">
  <div class="record-top">
   <div><div class="record-title">${esc(typeName(r.type))}</div><div class="record-meta">📍 ${esc(r.area)} · 👮 ${esc(r.guard||"Sin configurar")} · ${esc(fmt(r.createdAt))}</div></div>
-  ${r.type==="incidencia" && r.data.tipoMovimiento==="Salida" ? (r.returnedAt
-   ? `<span class="return-status">↩️ ${esc(fmtTime(r.returnedAt))}</span>`
-   : `<button class="return-btn" title="Marcar regreso" onclick="event.stopPropagation();markReturnById('${r.id}')">↩</button>`) : ""}
+  ${r.type==="incidencia" && r.data.tipoMovimiento==="Salida" ? ((r.returnedAt)
+   ? `<button class="return-status time-corner-btn" title="Toca para borrar la hora y volver a registrarla" onclick="event.stopPropagation();toggleCardTime('${r.id}','returnedAt','hora de regreso')">↩️ ${esc(fmtTime(r.returnedAt))}</button>`
+   : `<button class="return-btn" title="Registrar regreso" onclick="event.stopPropagation();toggleCardTime('${r.id}','returnedAt','hora de regreso')">↩</button>`) : ""}
+  ${r.type==="ambulancia" ? ((r.regresoAt || r.data.horaRegresoAmb)
+   ? `<button class="return-status time-corner-btn" title="Toca para borrar la hora y volver a registrarla" onclick="event.stopPropagation();toggleCardTime('${r.id}','regresoAt','hora de regreso de ambulancia')">↩️ ${esc(fmtTime(r.regresoAt || r.data.horaRegresoAmb))}</button>`
+   : `<button class="return-btn" title="Registrar regreso de ambulancia" onclick="event.stopPropagation();toggleCardTime('${r.id}','regresoAt','hora de regreso de ambulancia')">↩</button>`) : ""}
+  ${r.type==="vehiculo" ? ((r.salidaAt)
+   ? `<button class="return-status time-corner-btn" title="Toca para borrar la hora y volver a registrarla" onclick="event.stopPropagation();toggleCardTime('${r.id}','salidaAt','hora de salida')">↗️ ${esc(fmtTime(r.salidaAt))}</button>`
+   : `<button class="return-btn" title="Registrar salida" onclick="event.stopPropagation();toggleCardTime('${r.id}','salidaAt','hora de salida')">↗</button>`) : ""}
  </div>
  <div class="record-summary">${esc(summary(r))}</div>
  ${photoData(r).length?`<div class="record-photo">📷 ${photoData(r).length} foto${photoData(r).length>1?"s":""} adjunta${photoData(r).length>1?"s":""}</div>`:""}
@@ -457,7 +471,17 @@ window.editById=id=>{
  editingRecordId=r.id;
  forms[r.type].fields.forEach(([k,,ft])=>{const el=$("#f_"+k);if(el&&ft!=="photo"&&ft!=="patientList"&&ft!=="companionList"&&ft!=="timeToggle")el.value=r.data[k]||""});
  setupPhotoPickers(forms[r.type].fields,false);
- if(r.type==="ambulancia"){repeatState={patients:(r.data.pacientes||[]).map(x=>({...blankPatient(),...x})),companions:(r.data.acompanantes||[]).map(x=>({...blankCompanion(),...x}))};if(!repeatState.patients.length)repeatState.patients=[blankPatient()];renderPatients();renderCompanions();$("#addPatientBtn").onclick=()=>{repeatState.patients.push(blankPatient());renderPatients()};$("#addCompanionBtn").onclick=()=>{repeatState.companions.push(blankCompanion());renderCompanions()};setupTimeToggles();["horaSalidaAmb","horaRegresoAmb"].forEach(id=>{const b=$("#time_"+id),v=r.data[id];if(v){$("#f_"+id).value=v;b.textContent=`🕐 ${v}`}});}
+ if(r.type==="ambulancia"){
+  if(!r.regresoAt && r.data.horaRegresoAmb)r.regresoAt=r.data.horaRegresoAmb;
+  repeatState={patients:(r.data.pacientes||[]).map(x=>({...blankPatient(),...x})),companions:(r.data.acompanantes||[]).map(x=>({...blankCompanion(),...x}))};
+  if(!repeatState.patients.length)repeatState.patients=[blankPatient()];
+  renderPatients();renderCompanions();
+  $("#addPatientBtn").onclick=()=>{repeatState.patients.push(blankPatient());renderPatients()};
+  $("#addCompanionBtn").onclick=()=>{repeatState.companions.push(blankCompanion());renderCompanions()};
+  setupTimeToggles();
+  const b=$("#time_horaSalidaAmb"),v=r.data.horaSalidaAmb;
+  if(b&&v){$("#f_horaSalidaAmb").value=v;b.textContent=`🕐 ${v}`;}
+}
 
  forms[r.type].fields.forEach(([k,,ft])=>{if(ft==="photo"&&r.data[k]){const preview=$("#preview_"+k);if(preview)preview.innerHTML=`<img src="${r.data[k]}" alt="Foto guardada">`}});
 };
