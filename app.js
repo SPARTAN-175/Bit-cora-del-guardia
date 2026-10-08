@@ -250,10 +250,25 @@ function summary(r){
 }
 function typeName(t){return {paciente:"Paciente",internamiento:"Internamiento",vehiculo:"Vehículo",ambulancia:"Traslado en ambulancia",incidencia:"Entrada / salida",nota:"Nota"}[t]}
 
+let photoLocationCache=null;
+let photoLocationCacheAt=0;
 function getPhotoLocation(){
  return new Promise(resolve=>{
    if(!navigator.geolocation)return resolve("");
-   navigator.geolocation.getCurrentPosition(pos=>resolve(`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`),()=>resolve(""),{enableHighAccuracy:true,timeout:2500,maximumAge:60000});
+   const now=Date.now();
+   if(photoLocationCache && now-photoLocationCacheAt<60000)return resolve(photoLocationCache);
+
+   const formatPosition=pos=>{
+     const lat=Number(pos.coords.latitude).toFixed(6);
+     const lon=Number(pos.coords.longitude).toFixed(6);
+     const acc=Number.isFinite(pos.coords.accuracy)?` ±${Math.round(pos.coords.accuracy)} m`:"";
+     const value=`${lat}, ${lon}${acc}`;
+     photoLocationCache=value;
+     photoLocationCacheAt=Date.now();
+     resolve(value);
+   };
+   const fallback=()=>navigator.geolocation.getCurrentPosition(formatPosition,()=>resolve(""),{enableHighAccuracy:false,timeout:10000,maximumAge:120000});
+   navigator.geolocation.getCurrentPosition(formatPosition,fallback,{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
  });
 }
 function compressImage(file){
@@ -285,7 +300,21 @@ function compressImage(file){
  });
 }
 function photoData(r){
- return Object.entries(r.data).filter(([k,v])=>k.toLowerCase().includes("foto")&&v&&String(v).startsWith("data:image/")).map(([k,v])=>({key:k,data:v}));
+ const out=[];
+ const walk=(value,keyPath)=>{
+   if(!value)return;
+   if(typeof value==="string" && value.startsWith("data:image/")){
+     out.push({key:keyPath,data:value});
+     return;
+   }
+   if(Array.isArray(value)){
+     value.forEach((item,i)=>walk(item,`${keyPath}[${i+1}]`));
+     return;
+   }
+   if(typeof value==="object")Object.entries(value).forEach(([k,v])=>walk(v,keyPath?`${keyPath}.${k}`:k));
+ };
+ walk(r.data,"");
+ return out;
 }
 function shareText(r){
  const d=r.data, lines=[
@@ -348,8 +377,9 @@ async function makeShareImage(r){
    return await response.blob();
  }
 
- // Varias fotos: unirlas en una sola imagen para que Android/WhatsApp
- // reciba un único archivo y evitar bloqueos por múltiples adjuntos.
+ // Varias fotos: unir TODAS en una sola imagen tipo cuadrícula para que
+ // Android/WhatsApp reciba un único archivo sin perder las fotos anidadas
+ // de pacientes y acompañantes.
  const imgs=await Promise.all(photos.map(p=>new Promise((resolve,reject)=>{
    const img=new Image();
    img.onload=()=>resolve(img);
@@ -357,24 +387,30 @@ async function makeShareImage(r){
    img.src=p.data;
  })));
 
- const maxW=1000,gap=12;
+ const maxW=1000,gap=14,cols=imgs.length===2?2:2;
+ const cellW=Math.floor((maxW-gap*(cols-1))/cols);
  const sizes=imgs.map(img=>{
-   const scale=Math.min(1,maxW/img.width);
+   const scale=Math.min(1,cellW/img.width);
    return {w:Math.round(img.width*scale),h:Math.round(img.height*scale)};
  });
- const width=Math.max(...sizes.map(x=>x.w));
- const height=sizes.reduce((sum,x)=>sum+x.h,0)+gap*(sizes.length-1);
+ const rows=Math.ceil(imgs.length/cols);
+ const rowHeights=[];
+ for(let row=0;row<rows;row++)rowHeights.push(Math.max(...sizes.slice(row*cols,row*cols+cols).map(x=>x.h)));
+ const width=maxW;
+ const height=rowHeights.reduce((sum,x)=>sum+x.h,0)+gap*(rows-1);
  const canvas=document.createElement("canvas");
  canvas.width=width;canvas.height=height;
  const ctx=canvas.getContext("2d");
  ctx.fillStyle="#fff";ctx.fillRect(0,0,width,height);
  let y=0;
  imgs.forEach((img,i)=>{
-   const z=sizes[i],x=Math.round((width-z.w)/2);
-   ctx.drawImage(img,x,y,z.w,z.h);
-   y+=z.h+gap;
+   const z=sizes[i],col=i%cols,row=Math.floor(i/cols);
+   const x=Math.round(col*(cellW+gap)+(cellW-z.w)/2);
+   const yy=y+Math.round((rowHeights[row]-z.h)/2);
+   ctx.drawImage(img,x,yy,z.w,z.h);
+   if(col===cols-1 || i===imgs.length-1)y+=rowHeights[row]+gap;
  });
- return new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.78));
+ return new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.82));
 }
 async function share(r){
  const text=shareText(r);

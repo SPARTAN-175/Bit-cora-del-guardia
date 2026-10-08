@@ -69,3 +69,6 @@ v0.5.0
 
 v0.5.1 — Alertas internas mejoradas: mensajes de éxito, información, advertencia y error con iconos; no son notificaciones del sistema y no requieren permisos.
 v0.5.2 — Horas de esquina editables: regreso de entradas/salidas, regreso de ambulancia y salida de vehículos; tocar la hora la borra y tocar de nuevo registra la nueva hora. La ambulancia conserva solo la hora de salida dentro del formulario.
+
+
+v0.5.3: corrected photo counting/sharing to include nested patient/companion ID photos; all photos are combined into a single 2-column image for WhatsApp. Improved GPS capture with longer timeout, fallback positioning, and 60-second cache; GPS remains optional/offline-friendly.
