@@ -206,7 +206,12 @@ function openForm(type,useHistory=true){
  <div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">💾 Guardar registro</button></div>`;
  $("#modal").classList.remove("hidden");$("#modal").setAttribute("aria-hidden","false");
  $("#recordForm").dataset.type=type;setupPhotoPickers(cfg.fields);
- if(type==="ambulancia"){repeatState={patients:[blankPatient()],companions:[]};renderPatients();renderCompanions();$("#addPatientBtn").onclick=()=>{repeatState.patients.push(blankPatient());renderPatients()};$("#addCompanionBtn").onclick=()=>{repeatState.companions.push(blankCompanion());renderCompanions()};setupTimeToggles();}
+ if(type==="ambulancia"){
+   repeatState={patients:[blankPatient()],companions:[]};
+   renderPatients();
+   renderCompanions();
+   setupTimeToggles();
+ }
  $("#f_nombre")?.focus();$("#cancelForm").onclick=closeModal;
 }
 
@@ -216,12 +221,54 @@ document.querySelectorAll(".quick-card").forEach(b=>b.onclick=()=>{
  openForm(b.dataset.type);
 });
 $("#closeModal").onclick=closeModal;
+
+// Controles de listas repetibles: se manejan por delegación para que sigan funcionando
+// aunque la lista se vuelva a renderizar después de agregar/cambiar un elemento.
+$("#recordForm").addEventListener("click",e=>{
+ const addPatient=e.target.closest("#addPatientBtn");
+ if(addPatient){
+   e.preventDefault(); e.stopPropagation();
+   if($("#recordForm").dataset.type!=="ambulancia")return;
+   repeatState.patients.push(blankPatient());
+   renderPatients();
+   requestAnimationFrame(()=>$("[data-patient=\"${repeatState.patients.length-1}\"]")?.focus());
+   return;
+ }
+ const addCompanion=e.target.closest("#addCompanionBtn");
+ if(addCompanion){
+   e.preventDefault(); e.stopPropagation();
+   if($("#recordForm").dataset.type!=="ambulancia")return;
+   repeatState.companions.push(blankCompanion());
+   renderCompanions();
+   const cards=$("#companionsList")?.querySelectorAll(".repeat-card");
+   cards?.[cards.length-1]?.scrollIntoView({behavior:"smooth",block:"nearest"});
+   cards?.[cards.length-1]?.querySelector("input[data-key=\"nombre\"]")?.focus();
+   return;
+ }
+});
+function syncRepeatStateFromDOM(){
+  // Android/PWA puede conservar el valor visible del input aunque el evento
+  // input/change no haya llegado a nuestro estado interno. Antes de guardar,
+  // leemos directamente los campos que están en pantalla para evitar perder
+  // pacientes o acompañantes.
+  document.querySelectorAll("[data-patient]").forEach(el=>{
+    const i=Number(el.dataset.patient);
+    if(repeatState.patients[i]) repeatState.patients[i][el.dataset.key]=el.value||"";
+  });
+  document.querySelectorAll("[data-companion]").forEach(el=>{
+    const i=Number(el.dataset.companion);
+    if(repeatState.companions[i]) repeatState.companions[i][el.dataset.key]=el.value||"";
+  });
+}
+
 async function prepareRepeatedPeople(list,prefix){
  const out=[];
  for(let i=0;i<list.length;i++){
    const x=list[i];
    const isComp=prefix==="c";
-   const hasAny=Object.entries(x).some(([k,v])=>k!=="foto"&&String(v||"").trim());
+   // No descartamos un elemento que tenga una foto aunque todavía no tenga
+   // texto; si tiene cualquier dato real debe conservarse.
+   const hasAny=Object.entries(x).some(([k,v])=>k!=="foto"&&String(v??"").trim()!=="") || !!photoFiles[`${prefix}${i}_foto`];
    if(!hasAny)continue;
    const item={...x};
    const key=`${prefix}${i}_foto`;
@@ -238,9 +285,10 @@ $("#recordForm").onsubmit=async e=>{
  if(!guardName){pendingQuickType=e.currentTarget.dataset.type;closeModal();openGuardModal();return}
  const type=e.currentTarget.dataset.type,cfg=forms[type],data={};
  if(type==="ambulancia"){
-   if(!repeatState.patients.length || !repeatState.patients[0].nombre.trim())return toast("Agrega al menos un paciente","warning");
-   data.pacientes=await prepareRepeatedPeople(repeatState.patients,"p","Paciente");
-   data.acompanantes=await prepareRepeatedPeople(repeatState.companions,"c","Acompañante");
+   syncRepeatStateFromDOM();
+   if(!repeatState.patients.length || !String(repeatState.patients[0].nombre||"").trim())return toast("Agrega al menos un paciente","warning");
+   data.pacientes=await prepareRepeatedPeople(repeatState.patients,"p");
+   data.acompanantes=await prepareRepeatedPeople(repeatState.companions,"c");
  }
  for(const [id,,fieldType] of cfg.fields){
    if(fieldType==="patientList"||fieldType==="companionList")continue;

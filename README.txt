@@ -1,3 +1,5 @@
+Bitácora de Guardia v0.5.6
+
 BITÁCORA DE GUARDIA — v0.2.0
 
 PWA totalmente offline.
@@ -75,3 +77,6 @@ v0.5.4: corrected photo counting/sharing to include nested patient/companion ID 
 
 
 v0.5.4: corregidos acompañantes, vista previa de fotos de pacientes/acompañantes y botón Registrar hora de ambulancia.
+
+
+v0.5.5 — Corrección del botón Agregar acompañante: ahora se gestiona por delegación de eventos para que siga funcionando después de renderizados dinámicos. No se cambia la estructura de datos existente.
