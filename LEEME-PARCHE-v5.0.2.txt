@@ -1,0 +1,18 @@
+BITÁCORA DEL GUARDIA — PARCHE v5.0.2
+
+Incluye cambios de interfaz y sincronización de eliminación.
+
+ARCHIVOS: reemplaza app.js, firebase-cloud.js, index.html, styles.css, sw.js, manifest.json, icon-192.png e icon-512.png en la carpeta publicada.
+
+CAMBIOS:
+- Las tarjetas muestran fotografías grandes y la nota debajo.
+- Tocar una foto abre visor a pantalla completa.
+- Tocar la tarjeta ya no abre directamente el formulario de edición. Hay botón Editar.
+- La eliminación de una publicación sincronizada borra el documento Firestore y sus objetos de Storage.
+- La eliminación remota está restringida al administrador de la organización, de acuerdo con las reglas actuales de Storage y Firestore.
+- Nuevo icono ilustrado de guardia.
+
+IMPORTANTE SOBRE EL BORRADO:
+Los registros locales no publicados solo existen en ese dispositivo: al borrarlos se quitan del almacenamiento local. Si el registro está publicado en Firebase, el botón Eliminar intenta borrar también el documento y las fotos remotas. Si el usuario no es administrador, Firebase rechazará la eliminación remota y el registro local se conserva. No se modifican firestore.rules ni storage.rules.
+
+PRUEBAS: sintaxis JavaScript y estructura ZIP. No se ha probado contra el proyecto Firebase en vivo. Haz primero una copia de seguridad y prueba con un registro/foto no sensibles.

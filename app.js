@@ -605,7 +605,7 @@ async function publishRecord(id){
 }
 function makeDeviceId(){let id=localStorage.getItem("bitacora_device_id");if(!id){id=crypto.randomUUID();localStorage.setItem("bitacora_device_id",id)}return id;}
 
-function unpublishRecord(pid){if(!confirm("¿Quitar esta publicación de este dispositivo?"))return;publishedRecords=publishedRecords.filter(x=>x.publishedId!==pid);localStorage.setItem(publishedKey,JSON.stringify(publishedRecords));renderPublished()}
+async function unpublishRecord(pid){const x=publishedRecords.find(p=>p.publishedId===pid);if(!x)return;if(!confirm("¿Eliminar esta publicación de Firebase y sus fotografías, además de quitarla de este dispositivo?"))return;try{if(x.cloud){if(!window.BitacoraCloud?.deletePublication)throw new Error("No está disponible la eliminación en la nube.");await window.BitacoraCloud.deletePublication(pid);}else{window.BitacoraCloud?.removePendingPublication?.(pid);}publishedRecords=publishedRecords.filter(p=>p.publishedId!==pid);try{localStorage.setItem(publishedKey,JSON.stringify(publishedRecords));}catch(e){console.warn(e)}renderPublished();toast("Publicación eliminada"+(x.cloud?" de Firebase y Storage":" del dispositivo"));}catch(e){console.error(e);toast("No se pudo eliminar: "+(e.message||e),"error");}}
 function htmlEscape(s){return esc(s)}
 function reportHtml(list,title){
  const blocks=list.map(x=>{const r=x.record||x,photos=photoData(r);return `<article><h2>${htmlEscape(typeName(r.type))}</h2><div class="meta">${htmlEscape(fmt(r.createdAt))} · ${htmlEscape(r.area)} · 👮 ${htmlEscape(r.guard||"Sin configurar")}</div><p>${htmlEscape(shareText(r))}</p>${photos.map(p=>`<img src="${p.data}" alt="Foto de evidencia">`).join("")}</article>`}).join("\n");
@@ -629,7 +629,7 @@ async function sharePublishedPackage(pid){
  if(fs&&share){try{const res=await fs.writeFile({path:`publicaciones/publicacion_${x.publishedId}.bguard`,data:btoa(unescape(encodeURIComponent(json))),directory:"CACHE",recursive:true});if(res?.uri){await share.share({title:"Publicación de Bitácora",text:shareText(x.record),files:[res.uri]});return}}catch(e){console.warn(e)}}
  downloadBlob(`publicacion_${x.publishedId}.bguard`,new Blob([json],{type:"application/json"}));
 }
-function renderPublished(){const box=$("#publishedList"),empty=$("#publishedEmpty");if(!box)return;empty.style.display=publishedRecords.length?"none":"block";box.innerHTML=publishedRecords.map(x=>{const r=x.record;const ph=photoData(r)[0];return `<article class="record published-card" onclick="openPublishedDetail('${x.publishedId}')"><div class="record-top"><div><div class="record-title">${esc(typeName(r.type))}</div><div class="record-meta">📍 ${esc(r.area)} · 👮 ${esc(r.guard||"Sin configurar")} · 📡 Publicado ${esc(fmt(x.publishedAt))}</div></div></div><span class="publish-badge">PUBLICADO</span><div class="record-summary">${esc(summary(r))}</div>${ph?`<img class="published-photo" src="${ph.data}" alt="Evidencia">`:""}<div class="record-actions"><button onclick="event.stopPropagation();sharePublished('${x.publishedId}')">📤 Compartir</button><button onclick="event.stopPropagation();sharePublishedPackage('${x.publishedId}')">📡 Exportar</button><button onclick="event.stopPropagation();downloadPublishedOne('${x.publishedId}')">📄 Descargar</button><button class="danger" onclick="event.stopPropagation();unpublishRecord('${x.publishedId}')">🗑️</button></div><small class="photo-help">Toca la publicación para ver todos sus datos y fotografías.</small></article>`}).join("")}
+function renderPublished(){const box=$("#publishedList"),empty=$("#publishedEmpty");if(!box)return;empty.style.display=publishedRecords.length?"none":"block";box.innerHTML=publishedRecords.map(x=>{const r=x.record;const photos=photoData(r);return `<article class="record published-card"><div class="record-top"><div><div class="record-title">${esc(typeName(r.type))}</div><div class="record-meta">📍 ${esc(r.area)} · 👮 ${esc(r.guard||"Sin configurar")} · 📡 ${esc(fmt(x.publishedAt))}</div></div></div><span class="publish-badge">PUBLICADO</span>${photos.map((p,i)=>`<figure class="published-photo-wrap"><img class="published-photo" src="${p.data}" alt="Evidencia ${i+1}" onclick="showPhotoLightbox(this.src,'${esc(p.key||`Evidencia ${i+1}`)}')"><figcaption>${esc(p.key||`Evidencia ${i+1}`)} · Toca para ampliar</figcaption></figure>`).join("")}<div class="record-summary record-note">${esc(summary(r))}</div><div class="record-actions"><button onclick="openPublishedDetail('${x.publishedId}')">👁️ Ver</button><button onclick="sharePublished('${x.publishedId}')">📤 Compartir</button><button onclick="sharePublishedPackage('${x.publishedId}')">📡 Exportar</button><button onclick="downloadPublishedOne('${x.publishedId}')">📄 Descargar</button><button class="danger" onclick="unpublishRecord('${x.publishedId}')">🗑️ Eliminar</button></div></article>`}).join("")}
 function openPublished(){pushView("published");renderPublished();$("#publishedModal").classList.remove("hidden")}
 function closePublished(fromPop=false){$("#publishedModal").classList.add("hidden");if(!fromPop&&history.state?.view==="published")history.back()}
 function openPublishedDetail(pid){const x=publishedRecords.find(p=>p.publishedId===pid);if(!x)return;pushView("publishedDetail");$("#publishedDetailModal").dataset.pid=pid;const r=x.record,photos=photoData(r);$("#publishedDetailTitle").textContent=typeName(r.type);$("#publishedDetailMeta").textContent=`${fmt(r.createdAt)} · ${r.area} · Guardia: ${r.guard||'Sin configurar'} · Publicado: ${fmt(x.publishedAt)}`;$("#publishedDetailText").textContent=shareText(r);$("#publishedDetailPhotos").innerHTML=photos.map((p,i)=>`<figure class="detail-photo"><img src="${p.data}" alt="Evidencia ${i+1}"><figcaption>${esc(p.key||`Evidencia ${i+1}`)}</figcaption></figure>`).join("")||'<p class="muted">Esta publicación no contiene fotografías.</p>';$("#publishedDetailModal").classList.remove("hidden")}
@@ -650,7 +650,30 @@ function toggleCardTime(id,field,label){
 }
 window.toggleCardTime=toggleCardTime;
 
-function deleteRecord(id){if(confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")){records=records.filter(r=>r.id!==id);save();toast("Registro eliminado")}}
+function showPhotoLightbox(src,caption="Evidencia"){
+ const modal=$("#photoLightbox"),img=$("#photoLightboxImg"),cap=$("#photoLightboxCaption");
+ if(!modal||!img)return;img.src=src;cap.textContent=caption;modal.classList.remove("hidden");modal.setAttribute("aria-hidden","false");
+}
+function closePhotoLightbox(){const m=$("#photoLightbox");if(!m)return;m.classList.add("hidden");m.setAttribute("aria-hidden","true");$("#photoLightboxImg").src="";}
+function showRecordPreview(r){const photos=photoData(r);const title=typeName(r.type);const html=photos.map((p,i)=>`<figure class="record-preview-photo"><img src="${p.data}" alt="Evidencia ${i+1}" onclick="showPhotoLightbox(this.src,'${esc(p.key||`Evidencia ${i+1}`)}')"><figcaption>${esc(p.key||`Evidencia ${i+1}`)}</figcaption></figure>`).join("");
+ const modal=$("#recordPreviewModal");if(!modal)return;$("#recordPreviewTitle").textContent=title;$("#recordPreviewMeta").textContent=`${fmt(r.createdAt)} · ${r.area||""} · Guardia: ${r.guard||"Sin configurar"}`;$("#recordPreviewPhotos").innerHTML=html;$("#recordPreviewText").textContent=shareText(r);modal.dataset.recordId=r.id;modal.classList.remove("hidden");}
+window.showPhotoLightbox=showPhotoLightbox;
+async function deleteRecord(id){
+ const r=records.find(x=>x.id===id); if(!r)return;
+ if(!confirm("¿Eliminar este registro? Si también está publicado, se eliminará de Firebase y sus fotografías de Storage."))return;
+ const linked=publishedRecords.filter(x=>x.sourceId===id || x.record?.id===id);
+ try{
+  for(const pub of linked){
+   if(pub.cloud){
+    if(!window.BitacoraCloud?.deletePublication)throw new Error("No está disponible la eliminación en la nube. Actualiza firebase-cloud.js.");
+    await window.BitacoraCloud.deletePublication(pub.publishedId);
+   }else{window.BitacoraCloud?.removePendingPublication?.(pub.publishedId);}
+  }
+  publishedRecords=publishedRecords.filter(x=>!linked.includes(x));
+  try{localStorage.setItem(publishedKey,JSON.stringify(publishedRecords));}catch(e){console.warn(e)}
+  records=records.filter(x=>x.id!==id);save();renderPublished();toast("Registro eliminado"+(linked.length?" también de Firebase y Storage":" del dispositivo"));
+ }catch(e){console.error(e);toast("No se pudo eliminar de la nube: "+(e.message||e),"error");}
+}
 function render(){
  const q=($("#searchInput")?.value||"").toLowerCase();
  const date=$("#dateFilter")?.value||selectedDate;
@@ -663,7 +686,7 @@ function render(){
  $("#countBadge").textContent=dayCount;
  $("#emptyState").style.display=arr.length?"none":"block";
  $("#emptyState").innerHTML=`<div>📒</div><strong>${date===new Date().toLocaleDateString("en-CA")?"No hay registros de hoy":"No hay registros en este día"}</strong><p>${date===new Date().toLocaleDateString("en-CA")?"Selecciona una opción arriba para comenzar.":"Puedes consultar otro día desde el historial."}</p>`;
- $("#records").innerHTML=arr.map(r=>`<article class="record record-clickable" onclick="openRecordById('${r.id}')">
+ $("#records").innerHTML=arr.map(r=>`<article class="record record-clickable">
  <div class="record-top">
   <div><div class="record-title">${esc(typeName(r.type))}</div><div class="record-meta">📍 ${esc(r.area)} · 👮 ${esc(r.guard||"Sin configurar")} · ${esc(fmt(r.createdAt))}</div></div>
   ${r.type==="incidencia" && String(r.data?.tipoMovimiento||"").trim().toLocaleLowerCase("es-MX")==="entrada" ? ((r.salidaAt)
@@ -679,18 +702,18 @@ function render(){
    ? `<button class="return-status time-corner-btn" title="Toca para borrar la hora y volver a registrarla" onclick="event.stopPropagation();toggleCardTime('${r.id}','salidaAt','hora de salida')">↗️ ${esc(fmtTime(r.salidaAt))}</button>`
    : `<button class="return-btn" title="Registrar salida" onclick="event.stopPropagation();toggleCardTime('${r.id}','salidaAt','hora de salida')">↗</button>`) : ""}
  </div>
- <div class="record-summary">${esc(summary(r))}</div>
- ${photoData(r).length?`<div class="record-photo">📷 ${photoData(r).length} foto${photoData(r).length>1?"s":""} adjunta${photoData(r).length>1?"s":""}</div>`:""}
+ ${photoData(r).length?`<div class="record-gallery">${photoData(r).map((p,i)=>`<img class="record-large-photo" src="${p.data}" alt="Evidencia ${i+1}" loading="lazy" onclick="showPhotoLightbox(this.src,'${esc(p.key||`Evidencia ${i+1}`)}')"><small>${esc(p.key||`Evidencia ${i+1}`)} · Toca para ampliar</small>`).join("")}</div>`:""}
+ <div class="record-summary record-note">${esc(summary(r))}</div>
  <div class="record-actions">
   <button onclick="event.stopPropagation();shareById('${r.id}')">📤 Compartir</button>
    <button onclick="event.stopPropagation();publishRecord('${r.id}')">📡 Publicar</button>
-  <button onclick="event.stopPropagation();editById('${r.id}')">✏️ Ver / editar</button>
+  <button onclick="event.stopPropagation();editById('${r.id}')">✏️ Editar</button>
   <button class="danger" onclick="event.stopPropagation();deleteRecord('${r.id}')">🗑️</button>
  </div>
 </article>`).join("");
 }
 window.shareById=id=>{const r=records.find(x=>x.id===id);if(r)share(r)}
-window.openRecordById=id=>{const r=records.find(x=>x.id===id);if(r)editById(id)};
+window.openRecordById=id=>{const r=records.find(x=>x.id===id);if(r)showRecordPreview(r)};
 window.deleteRecord=deleteRecord;
 window.editById=id=>{
  const r=records.find(x=>x.id===id);if(!r)return;

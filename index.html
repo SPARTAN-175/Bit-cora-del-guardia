@@ -6,12 +6,13 @@
   <meta name="theme-color" content="#101d2c">
   <meta name="description" content="Bitácora profesional de guardia con sincronización segura por organización.">
   <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="stylesheet" href="styles.css">
   <title>Bitácora del Guardia | Control operativo</title>
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><div class="brand-icon">🏥</div><div><h1>Bitácora de Guardia</h1><p id="clock">--/--/---- --:--</p></div></div>
+  <div class="brand"><img class="brand-icon-img" src="icon-192.png" alt="Guardia"><div><h1>Bitácora de Guardia</h1><p id="clock">--/--/---- --:--</p></div></div>
   <div class="top-actions"><span id="guardDisplay" class="guard-chip">👮 Sin configurar</span><button id="menuBtn" class="menu-btn">☰</button><button id="installBtn" class="icon-btn hidden">⬇️</button></div>
 </header>
 <div id="drawerBackdrop" class="drawer-backdrop hidden"></div>
@@ -136,6 +137,10 @@
     <div id="publishedEmpty" class="empty"><div>📡</div><strong>Aún no hay publicaciones</strong><p>Publica un registro desde la lista de tu guardia o importa una publicación.</p></div>
   </div>
 </div>
+
+<div id="recordPreviewModal" class="modal hidden" aria-hidden="true"><div class="modal-card preview-card"><div class="modal-head"><div><span class="eyebrow">DETALLE DEL REGISTRO</span><h2 id="recordPreviewTitle">Registro</h2></div><button class="close" onclick="document.getElementById('recordPreviewModal').classList.add('hidden')">×</button></div><p id="recordPreviewMeta" class="muted"></p><div id="recordPreviewPhotos" class="record-preview-photos"></div><pre id="recordPreviewText" class="published-detail-text"></pre><div class="form-actions"><button class="secondary" onclick="document.getElementById('recordPreviewModal').classList.add('hidden')">Cerrar</button><button class="primary" onclick="editById(document.getElementById('recordPreviewModal').dataset.recordId)">✏️ Editar</button></div></div></div>
+<div id="photoLightbox" class="photo-lightbox hidden" aria-hidden="true" onclick="closePhotoLightbox()"><button class="photo-lightbox-close" aria-label="Cerrar">×</button><img id="photoLightboxImg" alt="Fotografía ampliada"><p id="photoLightboxCaption"></p></div>
+
 <div id="publishedDetailModal" class="modal hidden" aria-hidden="true">
   <div class="modal-card">
     <div class="modal-head"><div><span class="eyebrow">DETALLE COMPLETO</span><h2 id="publishedDetailTitle">Publicación</h2></div><button id="closePublishedDetail" class="close">×</button></div>
@@ -177,6 +182,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="app.js?v=5.0.1"></script><script src="firebase-cloud.js?v=5.0.1"></script>
+<script src="app.js?v=5.0.2"></script><script src="firebase-cloud.js?v=5.0.2"></script>
 </body>
 </html>

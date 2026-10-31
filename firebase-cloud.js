@@ -50,8 +50,21 @@ async function hydrateRecord(record){
  return walk(record);
 }
 async function publish(publication){if(!user||!orgId||member?.status!=='active')throw new Error('Inicia sesión y conecta una organización.');const ref=db.collection('bitacoraOrganizations').doc(orgId).collection('reports').doc(publication.publishedId);const record=await uploadRecord(publication.record,publication.publishedId);await ref.set({sourceId:publication.sourceId,publisher:publication.publisher,uid:user.uid,record,publishedAt:firebase.firestore.FieldValue.serverTimestamp(),area:publication.record.area||'',type:publication.record.type||'',schemaVersion:5,status:'published'});}
+async function deletePublication(reportId){
+ if(!user||!orgId||member?.status!=="active")throw new Error("Inicia sesión en la organización.");
+ if(member?.role!=="admin")throw new Error("Solo el administrador de la organización puede borrar publicaciones y fotografías de Firebase.");
+ const ref=db.collection("bitacoraOrganizations").doc(orgId).collection("reports").doc(reportId);
+ const snap=await ref.get();if(!snap.exists)return true;
+ const paths=[];function collect(v){if(!v)return;if(Array.isArray(v)){v.forEach(collect);return;}if(typeof v==="object"){if(typeof v.__bitacoraStoragePath==="string")paths.push(v.__bitacoraStoragePath);Object.values(v).forEach(collect);}}
+ collect(snap.data().record);
+ for(const path of [...new Set(paths)]){try{await storage.ref(path).delete();}catch(e){if(e.code!=="storage/object-not-found")throw e;}}
+ await ref.delete();
+ const pending=JSON.parse(localStorage.getItem(pendingKey)||"[]").filter(x=>x.publishedId!==reportId);localStorage.setItem(pendingKey,JSON.stringify(pending));
+ return true;
+}
 function queue(publication){const a=JSON.parse(localStorage.getItem(pendingKey)||'[]');if(!a.some(x=>x.publishedId===publication.publishedId))a.push(publication);try{localStorage.setItem(pendingKey,JSON.stringify(a));}catch(e){throw new Error('El teléfono no tiene espacio local suficiente para conservar la publicación pendiente. Exporta un respaldo y libera espacio.');}}
 function markSynced(id){const a=JSON.parse(localStorage.getItem(pendingKey)||'[]').filter(x=>x.publishedId!==id);localStorage.setItem(pendingKey,JSON.stringify(a));}
+function removePendingPublication(id){markSynced(id);return true;}
 async function flushQueue(){if(!navigator.onLine||!user||member?.status!=='active')return;const a=JSON.parse(localStorage.getItem(pendingKey)||'[]');for(const p of a){try{await publish(p);markSynced(p.publishedId);}catch(e){console.warn('Publicación pendiente',p.publishedId,e);break;}}}
 window.addEventListener('online',flushQueue);
 async function createOrg(){const name=safeName($('#orgName').value),shortName=safeName($('#orgShort').value);if(name.length<3)return msg('Escribe el nombre de la organización.');try{const cfgRef=db.collection('bitacoraConfig').doc('main');const ref=db.collection('bitacoraOrganizations').doc();await db.runTransaction(async tx=>{const cfg=await tx.get(cfgRef);if(cfg.exists)throw new Error('La organización principal ya fue creada. Solicita una invitación QR al administrador.');tx.set(ref,{name,shortName,ownerUid:user.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp(),status:'active',schemaVersion:1});tx.set(ref.collection('members').doc(user.uid),{uid:user.uid,email:user.email,displayName:safeName($('#authName').value)||user.displayName||user.email,role:'admin',status:'active',joinedAt:firebase.firestore.FieldValue.serverTimestamp()});tx.set(cfgRef,{primaryOrgId:ref.id,ownerUid:user.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()});});orgId=ref.id;member={uid:user.uid,role:'admin',status:'active',displayName:safeName($('#authName').value)||user.email};localStorage.setItem(localOrgKey,orgId);await enterApp();toast('Organización creada correctamente.');}catch(e){msg(friendlyError(e));}}
@@ -67,6 +80,6 @@ $('#loginTab').onclick=()=>setAuthMode('login');$('#registerTab').onclick=()=>se
 $('#authSubmit').onclick=async()=>{const email=$('#authEmail').value.trim(),pass=$('#authPassword').value,name=safeName($('#authName').value);if(!email||!pass)return msg('Escribe tu correo y contraseña.');try{if(authMode==='register'){const cred=await auth.createUserWithEmailAndPassword(email,pass);if(name)await cred.user.updateProfile({displayName:name});}else await auth.signInWithEmailAndPassword(email,pass);msg('Acceso correcto.',true);}catch(e){msg(friendlyError(e));}};
 $('#resetPassword').onclick=async()=>{const email=$('#authEmail').value.trim();if(!email)return msg('Escribe primero tu correo.');try{await auth.sendPasswordResetEmail(email);msg('Enviamos un enlace para restablecer tu contraseña.',true);}catch(e){msg(friendlyError(e));}};
 $('#createOrgBtn').onclick=createOrg;$('#joinOrgBtn').onclick=joinOrg;$('#signOutSetup').onclick=signOut;$('#orgSignOut').onclick=signOut;$('#drawerOrganization').onclick=()=>{document.querySelector('#drawer')?.classList.remove('open');document.querySelector('#drawerBackdrop')?.classList.add('hidden');openOrgModal()};$('#closeOrgModal').onclick=()=>$('#orgModal').classList.add('hidden');$('#generateInviteBtn').onclick=createInvite;$('#copyInviteBtn').onclick=async()=>{const p=$('#inviteQrWrap').dataset.payload||'';try{await navigator.clipboard.writeText(p);toast('Invitación copiada.');}catch(_){toast('No se pudo copiar la invitación.','warning')}};
-window.BitacoraCloud={publish,queue,markSynced,signOut,getOrganization:()=>orgData};
+window.BitacoraCloud={publish,queue,markSynced,removePendingPublication,deletePublication,signOut,getOrganization:()=>orgData};
 setAuthMode('login');start();
 })();
