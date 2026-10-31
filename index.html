@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101d2c">
+  <meta name="description" content="Bitácora profesional de guardia con sincronización segura por organización.">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+  <title>Bitácora del Guardia | Control operativo</title>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><div class="brand-icon">🏥</div><div><h1>Bitácora de Guardia</h1><p id="clock">--/--/---- --:--</p></div></div>
+  <div class="top-actions"><span id="guardDisplay" class="guard-chip">👮 Sin configurar</span><button id="menuBtn" class="menu-btn">☰</button><button id="installBtn" class="icon-btn hidden">⬇️</button></div>
+</header>
+<div id="drawerBackdrop" class="drawer-backdrop hidden"></div>
+<aside id="drawer" class="drawer" aria-hidden="true">
+  <div class="drawer-head"><div><span class="eyebrow">BITÁCORA</span><h2>Menú</h2></div><button id="closeDrawer" class="close">×</button></div>
+  <div class="drawer-profile"><div class="drawer-avatar">👮</div><div><strong id="drawerGuardName">Sin configurar</strong><small id="drawerAreaName">Urgencias</small></div></div>
+  <button class="drawer-item" id="drawerGuard">👮 <span>Configurar guardia</span></button>
+  <button class="drawer-item" id="drawerArea">📍 <span>Cambiar área</span></button>
+  <div class="drawer-separator"></div>
+  <button class="drawer-item" id="drawerToday">📅 <span>Registros de hoy</span></button>
+  <button class="drawer-item" id="drawerHistory">🗂️ <span>Historial por día</span></button>
+  <button class="drawer-item" id="drawerShare">📤 <span>Compartir guardia</span></button>
+  <button class="drawer-item" id="drawerPublished">📡 <span>Publicaciones</span></button>
+  <button class="drawer-item" id="drawerOrganization">🏢 <span>Organización y equipo</span></button>
+  <button class="drawer-item" id="drawerImportPublished">📥 <span>Importar publicaciones</span></button>
+  <button class="drawer-item" id="drawerDownloadGuard">📄 <span>Descargar guardia publicada</span></button>
+  <div class="drawer-separator"></div>
+  <button class="drawer-item" id="drawerExport">💾 <span>Exportar respaldo</span></button>
+  <button class="drawer-item" id="drawerImport">📥 <span>Importar respaldo</span></button>
+  <input id="backupFileInput" type="file" accept="application/json,.json" hidden>
+  <input id="publishedFileInput" type="file" accept="application/json,.json,.bguard" hidden>
+  <div class="drawer-separator"></div><p class="drawer-note">Todo se guarda localmente en este dispositivo.</p>
+</aside>
+
+<main>
+  <section class="panel status-panel">
+  <div class="status-main"><span class="eyebrow">GUARDIA ACTUAL</span><h2 id="currentArea">Urgencias</h2><p id="statusGuard">👮 Sin configurar</p></div>
+  <button id="quickAreaBtn" class="secondary compact-btn">📍 Área</button>
+</section>
+
+  <section class="quick-grid">
+    <button class="quick-card" data-type="paciente">👤<strong>Paciente</strong><small>Ingreso / atención</small></button>
+    <button class="quick-card" data-type="internamiento">🛏️<strong>Internamiento</strong><small>Paciente + responsable</small></button>
+    <button class="quick-card" data-type="vehiculo">🚗<strong>Vehículo</strong><small>Acceso / salida</small></button>
+    <button class="quick-card" data-type="ambulancia">🚑<strong>Ambulancia</strong><small>Traslado de paciente</small></button>
+    <button class="quick-card" data-type="incidencia">📋<strong>Entrada / salida</strong><small>Control de acceso</small></button>
+    <button class="quick-card" data-type="nota">📝<strong>Nota libre</strong><small>Cualquier situación</small></button>
+  </section>
+
+  <section class="panel">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">REGISTROS</span>
+        <h2>Actividad de la guardia</h2>
+      </div>
+      <span id="countBadge" class="badge">0</span>
+    </div>
+    <div class="toolbar"><input id="searchInput" type="search" placeholder="Buscar en los registros…"></div>
+    <div class="day-strip">
+      <button id="prevDayBtn" class="day-nav">‹</button>
+      <label><span>REGISTROS DEL DÍA</span><input id="dateFilter" type="date"></label>
+      <button id="nextDayBtn" class="day-nav">›</button>
+    </div>
+    <div id="records" class="records"></div>
+    <div id="emptyState" class="empty">
+      <div>📒</div>
+      <strong>Aún no hay registros</strong>
+      <p>Selecciona una opción arriba para comenzar.</p>
+    </div>
+  </section>
+</main>
+
+<div id="modal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <span id="modalEyebrow" class="eyebrow">NUEVO REGISTRO</span>
+        <h2 id="modalTitle">Paciente</h2>
+      </div>
+      <button id="closeModal" class="close">×</button>
+    </div>
+    <form id="recordForm"></form>
+  </div>
+</div>
+
+<div id="areaModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card small">
+    <div class="modal-head">
+      <div>
+        <span class="eyebrow">CONFIGURACIÓN</span>
+        <h2>Área de guardia</h2>
+      </div>
+      <button id="closeAreaModal" class="close">×</button>
+    </div>
+    <p class="muted">Puedes cambiar de área las veces que necesites. El área queda guardada con cada registro.</p>
+    <label>Área actual
+      <input id="areaInput" list="areasList" placeholder="Ej. Urgencias">
+    </label>
+    <datalist id="areasList">
+      <option>Urgencias</option><option>Hospitalización</option><option>Consulta externa</option>
+      <option>Quirófano</option><option>Laboratorio</option><option>Rayos X</option>
+      <option>Admisión</option><option>Entrada principal</option><option>Patio</option>
+      <option>Otro</option>
+    </datalist>
+    <button id="saveAreaBtn" class="primary full">Guardar área</button>
+  </div>
+</div>
+
+<div id="guardModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card small">
+    <div class="modal-head">
+      <div>
+        <span class="eyebrow">IDENTIFICACIÓN</span>
+        <h2>Guardia responsable</h2>
+      </div>
+      <button id="closeGuardModal" class="close">×</button>
+    </div>
+    <p class="muted">Este nombre aparecerá en los nuevos registros y en los reportes compartidos. Puedes cambiar de área sin perder la identidad del guardia.</p>
+    <label>Nombre del guardia
+      <input id="guardNameInput" type="text" autocomplete="name" placeholder="Nombre completo del guardia">
+    </label>
+    <button id="saveGuardBtn" class="primary full">Guardar guardia</button>
+  </div>
+</div>
+
+<div id="publishedModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card">
+    <div class="modal-head"><div><span class="eyebrow">BITÁCORA COMPARTIDA</span><h2>Publicaciones</h2></div><button id="closePublished" class="close">×</button></div>
+    <p class="muted">Aquí aparecen los registros que este dispositivo ha publicado o importado de otro guardia.</p>
+    <p class="muted">Publicaciones sincronizadas con tu organización.</p>
+    <div id="publishedList" class="records"></div>
+    <div id="publishedEmpty" class="empty"><div>📡</div><strong>Aún no hay publicaciones</strong><p>Publica un registro desde la lista de tu guardia o importa una publicación.</p></div>
+  </div>
+</div>
+<div id="publishedDetailModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-card">
+    <div class="modal-head"><div><span class="eyebrow">DETALLE COMPLETO</span><h2 id="publishedDetailTitle">Publicación</h2></div><button id="closePublishedDetail" class="close">×</button></div>
+    <p id="publishedDetailMeta" class="muted"></p>
+    <pre id="publishedDetailText" class="published-detail-text"></pre>
+    <div id="publishedDetailPhotos" class="published-detail-photos"></div>
+    <div class="form-actions"><button id="publishedDetailBack" class="secondary">Volver</button><button id="publishedDetailShare" class="primary">📤 Compartir con fotos</button></div>
+  </div>
+</div>
+<div id="authGate" class="auth-gate">
+  <div class="auth-card">
+    <div class="auth-brand"><div class="auth-mark">BG</div><div><span class="eyebrow">CONTROL OPERATIVO</span><h1>BITÁCORA DEL GUARDIA</h1><p>Registro profesional de novedades y servicios</p></div></div>
+    <div id="authFormPanel">
+      <div class="auth-tabs"><button id="loginTab" class="active" type="button">Iniciar sesión</button><button id="registerTab" type="button">Crear cuenta</button></div>
+      <label>Correo electrónico<input id="authEmail" type="email" autocomplete="username" required placeholder="nombre@correo.com"></label>
+      <label>Contraseña<input id="authPassword" type="password" autocomplete="current-password" required minlength="6" placeholder="Mínimo 6 caracteres"></label>
+      <label id="authNameWrap" class="hidden">Nombre completo<input id="authName" type="text" autocomplete="name" placeholder="Nombre y apellidos"></label>
+      <button id="authSubmit" class="primary full" type="button">Iniciar sesión</button>
+      <button id="resetPassword" class="link-button" type="button">¿Olvidaste tu contraseña?</button>
+      <p id="authMessage" class="auth-message" role="status"></p>
+    </div>
+    <div id="orgSetupPanel" class="hidden">
+      <span class="eyebrow">VINCULACIÓN DE ORGANIZACIÓN</span><h2 id="orgSetupTitle">Conecta tu bitácora</h2>
+      <p id="orgSetupText" class="muted">Crea la organización si eres administrador o escanea una invitación QR para unirte.</p>
+      <div id="createOrgFields"><label>Nombre de la organización<input id="orgName" placeholder="Ej. Hospital Básico Comunitario de Ostuacán"></label><label>Nombre corto<input id="orgShort" placeholder="Hospital Ostuacán"></label><button id="createOrgBtn" class="primary full" type="button">Crear organización y ser administrador</button></div>
+      <div class="org-divider"><span>O</span></div>
+      <label>Código de invitación<input id="inviteCode" placeholder="Pega el código de invitación"></label><button id="scanInviteBtn" class="secondary full" type="button">📷 Escanear código QR con cámara</button><div id="qrScanner" class="qr-scanner hidden"><video id="qrVideo" playsinline></video><button id="stopQrScanner" class="secondary full" type="button">Detener cámara</button></div>
+      <button id="joinOrgBtn" class="secondary full" type="button">Solicitar incorporación</button>
+      <div id="pendingMembership" class="pending-box hidden">Tu solicitud está pendiente de autorización del administrador.</div>
+      <button id="signOutSetup" class="link-button" type="button">Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+<div id="orgModal" class="modal hidden"><div class="modal-card small"><div class="modal-head"><div><span class="eyebrow">ADMINISTRACIÓN</span><h2>Organización y equipo</h2></div><button id="closeOrgModal" class="close">×</button></div><div id="orgAdminPanel" class="hidden"><p id="orgAdminName" class="muted"></p><button id="generateInviteBtn" class="primary full" type="button">＋ Generar invitación QR</button><div id="inviteQrWrap" class="qr-wrap hidden"><div id="inviteQr"></div><p id="inviteCodeText" class="muted"></p><button id="copyInviteBtn" class="secondary full" type="button">Copiar invitación</button></div><h3>Solicitudes y miembros</h3><div id="membersList" class="member-list"></div></div><div id="orgMemberPanel" class="hidden"><p id="orgMemberInfo" class="muted"></p><p>Tu cuenta pertenece a esta organización. Para cambiar de organización, solicita al administrador que revoque tu acceso.</p></div><button id="orgSignOut" class="link-button" type="button">Cerrar sesión</button></div></div>
+<div id="imageViewer" class="image-viewer hidden" role="dialog" aria-modal="true"><button id="closeImageViewer" class="viewer-close" aria-label="Cerrar">×</button><img id="viewerImage" alt="Fotografía ampliada"><a id="downloadViewerImage" class="viewer-download" download="evidencia-bitacora.jpg">Descargar fotografía</a></div>
+<div id="toast" class="toast"></div>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="app.js?v=5.0.0"></script><script src="firebase-cloud.js?v=5.0.0"></script>
+</body>
+</html>

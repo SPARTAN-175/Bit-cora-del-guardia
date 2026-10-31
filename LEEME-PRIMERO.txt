@@ -1,0 +1,26 @@
+BITÁCORA DEL GUARDIA — PWA v5
+
+BASE: archivos web de Bitácora v4.0.3 (APK estable aportada).
+
+CONTENIDO
+- index.html, styles.css, app.js: interfaz y funciones locales heredadas, con rediseño profesional y sin interfaz MESH.
+- firebase-cloud.js: autenticación, organización, invitaciones QR, miembros, publicaciones y Storage.
+- sw.js: caché de shell PWA.
+- REGLAS-FIREBASE-ANEXO.txt: propuesta de reglas que debe agregarse a las reglas KSA existentes.
+
+ANTES DE PUBLICAR
+1. Habilitar Email/Password en Firebase Authentication.
+2. Agregar el bloque de reglas de Firestore y Storage del archivo REGLAS-FIREBASE-ANEXO.txt a las reglas existentes SIN reemplazar los bloques CAHESA, PIÑATAS ni TU MUNDO.
+3. Publicar las reglas y probar primero con cuentas de prueba.
+4. Subir el contenido de esta carpeta a la raíz del repositorio GitHub Pages.
+5. Abrir por HTTPS. Firebase Auth requiere dominios autorizados: agrega el dominio de GitHub Pages en Authentication > Settings > Authorized domains.
+
+NOTAS IMPORTANTES
+- No se han desplegado reglas ni se ha probado contra el backend real.
+- La primera cuenta que cree una organización se convierte en administradora de esa organización. Protege ese primer registro y no compartas el QR públicamente.
+- La incorporación por QR genera una solicitud pendiente; el administrador debe autorizarla.
+- Las publicaciones sincronizan las fotografías a Firebase Storage.
+- La aplicación conserva los registros locales heredados. La sincronización en nube se activa al publicar; si falla la conexión, se conserva una cola local y se reintenta al recuperar internet.
+- El QR se genera en pantalla; el escaneo se puede realizar con la cámara del teléfono y pegar el contenido JSON leído en el campo de invitación.
+- La descarga/guardado de fotos en galería varía por navegador; el visor incluye descarga manual.
+- Para uso hospitalario, no adjuntar datos identificables de pacientes sin autorización institucional y controles de privacidad aprobados.

@@ -1,0 +1,62 @@
+ANEXO PROPUESTO — AGREGAR A LAS REGLAS KSA EXISTENTES
+NO REEMPLAZAR LOS ARCHIVOS COMPLETOS.
+
+Firestore: insertar los siguientes match dentro de match /databases/{database}/documents, antes de las funciones globales. El documento bitacoraConfig/main bloquea la creación de más de una organización principal en esta instalación.
+
+match /bitacoraConfig/{configId} {
+  allow read: if request.auth != null;
+  allow create: if configId == 'main' && request.auth != null && request.resource.data.ownerUid == request.auth.uid && !exists(/databases/$(database)/documents/bitacoraConfig/main);
+  allow update, delete: if false;
+}
+
+match /bitacoraOrganizations/{orgId} {
+  function signed() { return request.auth != null; }
+  function memberPath() { return /databases/$(database)/documents/bitacoraOrganizations/$(orgId)/members/$(request.auth.uid); }
+  function isMember() { return signed() && exists(memberPath()) && get(memberPath()).data.status == 'active'; }
+  function isOrgAdmin() { return isMember() && get(memberPath()).data.role == 'admin'; }
+  allow create: if signed() && request.resource.data.ownerUid == request.auth.uid;
+  allow read: if signed(); // Solo metadatos de organización; reportes y miembros siguen protegidos por sus propias reglas.
+  allow update, delete: if isOrgAdmin();
+  match /members/{uid} {
+    function signed() { return request.auth != null; }
+    function myMemberPath() { return /databases/$(database)/documents/bitacoraOrganizations/$(orgId)/members/$(request.auth.uid); }
+    function activeAdmin() { return signed() && exists(myMemberPath()) && get(myMemberPath()).data.status == 'active' && get(myMemberPath()).data.role == 'admin'; }
+    allow read: if signed() && (uid == request.auth.uid || activeAdmin());
+    allow create: if signed() && uid == request.auth.uid && request.resource.data.uid == request.auth.uid && ((request.resource.data.status == 'active' && request.resource.data.role == 'admin' && getAfter(/databases/$(database)/documents/bitacoraOrganizations/$(orgId)).data.ownerUid == request.auth.uid && getAfter(/databases/$(database)/documents/bitacoraConfig/main).data.primaryOrgId == orgId && getAfter(/databases/$(database)/documents/bitacoraConfig/main).data.ownerUid == request.auth.uid) || (request.resource.data.status == 'pending' && request.resource.data.role == 'guard' && exists(/databases/$(database)/documents/bitacoraOrganizations/$(orgId)/invitations/$(request.resource.data.invitationId)) && get(/databases/$(database)/documents/bitacoraOrganizations/$(orgId)/invitations/$(request.resource.data.invitationId)).data.active == true && request.time < get(/databases/$(database)/documents/bitacoraOrganizations/$(orgId)/invitations/$(request.resource.data.invitationId)).data.expiresAt));
+    allow update: if activeAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','approvedAt','approvedBy','revokedAt']);
+    allow delete: if activeAdmin() && uid != request.auth.uid;
+  }
+  match /invitations/{inviteId} {
+    function signed() { return request.auth != null; }
+    function activeAdmin() { return signed() && exists(/databases/$(database)/documents/bitacoraOrganizations/$(orgId)/members/$(request.auth.uid)) && get(/databases/$(database)/documents/bitacoraOrganizations/$(orgId)/members/$(request.auth.uid)).data.status == 'active' && get(/databases/$(database)/documents/bitacoraOrganizations/$(orgId)/members/$(request.auth.uid)).data.role == 'admin'; }
+    allow read: if signed();
+    allow create: if activeAdmin() && request.resource.data.createdBy == request.auth.uid && request.resource.data.active == true;
+    allow update, delete: if activeAdmin();
+  }
+  match /reports/{reportId} {
+    function signed() { return request.auth != null; }
+    function memberPath() { return /databases/$(database)/documents/bitacoraOrganizations/$(orgId)/members/$(request.auth.uid); }
+    function activeMember() { return signed() && exists(memberPath()) && get(memberPath()).data.status == 'active'; }
+    allow read: if activeMember();
+    allow create: if activeMember() && request.resource.data.uid == request.auth.uid && request.resource.data.status == 'published';
+    allow update, delete: if activeMember() && get(memberPath()).data.role == 'admin';
+  }
+}
+
+Storage: insertar dentro de service firebase.storage / match /b/{bucket}/o.
+
+match /bitacora/{orgId}/reports/{reportId}/{fileName} {
+  function activeMember() {
+    return request.auth != null && firestore.exists(/databases/(default)/documents/bitacoraOrganizations/$(orgId)/members/$(request.auth.uid)) && firestore.get(/databases/(default)/documents/bitacoraOrganizations/$(orgId)/members/$(request.auth.uid)).data.status == 'active';
+  }
+  allow read: if activeMember();
+  allow create, update: if activeMember() && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+  allow delete: if activeMember() && firestore.get(/databases/(default)/documents/bitacoraOrganizations/$(orgId)/members/$(request.auth.uid)).data.role == 'admin';
+}
+
+ADVERTENCIAS PARA REVISIÓN ANTES DE PUBLICAR:
+1. La invitación se valida en Firestore y su fecha de expiración se contrasta con request.time. El límite de usos debe reforzarse con transacción o Cloud Function si se necesita aplicarlo estrictamente.
+2. La creación de organización y miembro administrador usa un batch; la regla de miembro admin comprueba getAfter() del documento de organización para permitir exclusivamente al ownerUid inicial. Aun así, validar el flujo en Emulator Suite antes de desplegar.
+3. El anexo no modifica los bloques existentes, pero su integración debe compilarse y probarse en Firebase Rules Playground/Emulator antes de desplegar.
+4. Storage Rules puede consultar Firestore con firestore.get/exists; confirmar compatibilidad con el bucket y límites de acceso.
+5. El cliente nunca debe confiar en datos del QR sin validar la invitación en Firestore.
