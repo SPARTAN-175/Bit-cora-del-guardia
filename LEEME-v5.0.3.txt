@@ -1,0 +1,31 @@
+BITÁCORA DEL GUARDIA — PARCHE v5.0.3
+
+CAMBIO PRINCIPAL
+- Guardar un reporte normal solo lo conserva en el almacenamiento local del teléfono (localStorage). No se envía a Firestore ni a Firebase Storage.
+- Firebase se utiliza únicamente cuando el usuario pulsa expresamente «Publicar» en ese reporte.
+- Si una publicación explícita falla por falta de conexión, queda en cola para reintentar su sincronización. Esa cola solo contiene reportes que el usuario ya intentó publicar.
+- La compresión se aplica al guardar la evidencia: lado mayor máximo 720 px y JPEG calidad 0.43. En Android Camera se solicita además una imagen de entrada más pequeña (máximo 1000 px, calidad 65); después pasa por la compresión común.
+- Las fotografías comprimidas se guardan en el reporte local. La copia original que el sistema de cámara puede guardar en la galería no se modifica.
+
+ARCHIVOS
+- app.js: guardado local y compresión de fotografías.
+- index.html: versión de caché 5.0.3.
+- sw.js: nuevo nombre de caché para forzar actualización.
+- firebase-cloud.js, styles.css, manifest.json e iconos: incluidos sin cambios funcionales para facilitar reemplazo completo.
+
+INSTALACIÓN
+1. Haz una copia de seguridad del repositorio.
+2. Reemplaza los archivos del ZIP en la raíz del sitio, manteniendo juntos los iconos.
+3. Publica GitHub Pages.
+4. Cierra completamente la PWA y vuelve a abrirla. Si no actualiza, borra la caché del sitio o reinstala la PWA.
+
+NOTAS IMPORTANTES
+- Los reportes no publicados permanecen solo en ese teléfono. Si desinstalas la aplicación, borras sus datos o pierdes el teléfono, pueden perderse; exporta respaldos periódicos.
+- La compresión reduce tamaño y resolución; conserva mejor el texto de fotos si se toma cerca y con buena luz.
+- La cola de reintentos no publica reportes nuevos por sí sola: únicamente reintenta publicaciones que el usuario ya solicitó.
+- No se modifican las reglas de Firestore ni Storage.
+
+VALIDACIÓN REALIZADA
+- node --check app.js y firebase-cloud.js.
+- Revisión de referencias de versión y contenido del ZIP.
+- No se realizó prueba contra el proyecto Firebase en vivo.

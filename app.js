@@ -214,7 +214,7 @@ function dataUrlToFile(dataUrl,name="foto.jpg"){
 async function nativePhoto(source){
  const cam=NativeCamera(); if(!cam)return null;
  try{
-  const opts={resultType:"data",quality:82,width:1400,height:1400,correctOrientation:true,allowEditing:false};
+  const opts={resultType:"data",quality:65,width:1000,height:1000,correctOrientation:true,allowEditing:false};
   if(source==="photos")opts.source="PHOTOS"; else opts.source="CAMERA";
   const p=await cam.getPhoto(opts);
   if(!p?.dataUrl && p?.base64String)return dataUrlToFile(`data:image/${p.format||"jpeg"};base64,${p.base64String}`);
@@ -342,8 +342,10 @@ $("#recordForm").onsubmit=async e=>{
    const r=records.find(x=>x.id===editingRecordId);
    if(r){r.data=data;save();closeModal();toast("Registro actualizado");}
  }else{
+   // Guardado local únicamente. Firebase solo se usa cuando el usuario pulsa
+   // explícitamente el botón «Publicar» de este registro.
    records.unshift({id:crypto.randomUUID(),type,createdAt:nowISO(),area:currentArea,guard:guardName||"Sin configurar",data});
-   save();closeModal();toast("Registro guardado correctamente");
+   save();closeModal();toast("Registro guardado en este teléfono");
  }
 };
 
@@ -380,30 +382,35 @@ function getPhotoLocation(){
  });
 }
 function compressImage(file){
- return new Promise(async (resolve,reject)=>{
+ // La evidencia se comprime ANTES de guardarse en el teléfono y antes de publicarse.
+ // Así los reportes locales ocupan menos espacio y Firebase recibe exactamente
+ // la misma versión ligera cuando el usuario pulsa explícitamente «Publicar».
+ return new Promise((resolve,reject)=>{
    try{
      const reader=new FileReader();
      reader.onload=async()=>{
        try{
          const img=new Image();
          img.onload=async()=>{
-           const max=900, scale=Math.min(1,max/Math.max(img.width,img.height));
-           const footer=82;
-           const c=document.createElement("canvas");c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale)+footer;
-           const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
-           ctx.drawImage(img,0,0,c.width,c.height-footer);
+           const max=720, scale=Math.min(1,max/Math.max(img.width,img.height));
+           const footer=64, photoW=Math.max(1,Math.round(img.width*scale)), photoH=Math.max(1,Math.round(img.height*scale));
+           const c=document.createElement("canvas");c.width=photoW;c.height=photoH+footer;
+           const ctx=c.getContext("2d");ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";
+           ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
+           ctx.drawImage(img,0,0,photoW,photoH);
            const location=await getPhotoLocation();
            const when=new Date();
-           ctx.fillStyle="#fff";ctx.fillRect(0,c.height-footer,c.width,footer);
-           ctx.fillStyle="#111";ctx.font="bold 18px Arial";ctx.fillText("Bitácora de Guardia",18,c.height-footer+25);
-           ctx.font="15px Arial";ctx.fillText(`Fecha/hora: ${fmt(when)}`,18,c.height-footer+47);
-           ctx.fillText(location?`Ubicación GPS: ${location}`:"Ubicación GPS: no disponible",18,c.height-footer+68);
-           resolve(c.toDataURL("image/jpeg",.58));
+           ctx.fillStyle="#fff";ctx.fillRect(0,photoH,c.width,footer);
+           ctx.fillStyle="#111";ctx.font="bold 14px Arial";ctx.fillText("Bitácora de Guardia",12,photoH+19);
+           ctx.font="11px Arial";ctx.fillText(`Fecha/hora: ${fmt(when)}`,12,photoH+37);
+           const gps=location?`GPS: ${location}`:"GPS: no disponible";
+           ctx.fillText(gps.slice(0,100),12,photoH+53);
+           resolve(c.toDataURL("image/jpeg",.43));
          };
-         img.onerror=reject;img.src=reader.result;
+         img.onerror=()=>reject(new Error("No se pudo leer la fotografía."));img.src=reader.result;
        }catch(e){reject(e)}
      };
-     reader.onerror=reject;reader.readAsDataURL(file);
+     reader.onerror=()=>reject(new Error("No se pudo cargar la fotografía."));reader.readAsDataURL(file);
    }catch(e){reject(e)}
  });
 }
