@@ -19,12 +19,38 @@ showGate(true);const cfg=await db.collection('bitacoraConfig').doc('main').get()
 async function enterApp(){const o=await db.collection('bitacoraOrganizations').doc(orgId).get();if(!o.exists)throw new Error('La organización ya no existe.');orgData=o.data();$('#orgSetupPanel').classList.add('hidden');showGate(false);if(window.setCloudGuardName)window.setCloudGuardName(member.displayName||user.displayName||user.email);const name=orgData.name||'Organización';const el=$('#currentArea');if(el&&!localStorage.getItem('bitacora_area_v1'))el.textContent=name;subscribeReports();await flushQueue();}
 function stopListeners(){if(unsubscribeReports)unsubscribeReports();if(unsubscribeMembers)unsubscribeMembers();if(unsubscribeMemberStatus)unsubscribeMemberStatus();unsubscribeReports=unsubscribeMembers=unsubscribeMemberStatus=null;}
 function watchMembershipApproval(ref){if(unsubscribeMemberStatus)unsubscribeMemberStatus();unsubscribeMemberStatus=ref.onSnapshot(async s=>{if(s.exists&&s.data().status==='active'){member=s.data();unsubscribeMemberStatus?.();unsubscribeMemberStatus=null;await enterApp();toast('Tu incorporación fue autorizada.');}});}
-function subscribeReports(){if(unsubscribeReports)unsubscribeReports();unsubscribeReports=db.collection('bitacoraOrganizations').doc(orgId).collection('reports').orderBy('publishedAt','desc').limit(100).onSnapshot(async snap=>{for(const d of snap.docs){try{const p=d.data();if(p.status==='deleted')continue;const pub={publishedId:d.id,sourceId:p.sourceId,publishedAt:p.publishedAt?.toDate?.().toISOString()||new Date().toISOString(),publisher:p.publisher,record:await hydrateRecord(p.record),cloud:true};window.receiveCloudPublication?.(pub);}catch(e){console.warn('No se pudo recuperar publicación',d.id,e)}}},e=>console.error('Firestore listener',e));}
+function subscribeReports(){
+ if(unsubscribeReports)unsubscribeReports();
+ unsubscribeReports=db.collection('bitacoraOrganizations').doc(orgId).collection('reports').orderBy('publishedAt','desc').limit(200).onSnapshot(async snap=>{
+  for(const d of snap.docs){
+   try{
+    const p=d.data();if(p.status==='deleted')continue;
+    const pub={publishedId:d.id,sourceId:p.sourceId,publishedAt:p.publishedAt?.toDate?.().toISOString()||new Date().toISOString(),publisher:p.publisher,record:await hydrateRecord(p.record),cloud:true,uid:p.uid,area:p.area||'',type:p.type||''};
+    window.receiveCloudPublication?.(pub);
+   }catch(e){console.warn('No se pudo recuperar publicación',d.id,e);}
+  }
+ },e=>{console.error('Firestore listener',e);if(window.toast)toast('No se pudieron cargar las publicaciones. Revisa permisos de Firestore.','error');});
+}
 async function mapImages(value,fn,path=''){if(typeof value==='string'&&value.startsWith('data:image/'))return fn(value,path);if(Array.isArray(value)){const a=[];for(let i=0;i<value.length;i++)a.push(await mapImages(value[i],fn,path+'_'+i));return a;}if(value&&typeof value==='object'){const o={};for(const [k,v] of Object.entries(value))o[k]=await mapImages(v,fn,path+'_'+k);return o;}return value;}
 async function uploadRecord(record,reportId){return mapImages(record,async(data,path)=>{const ref=storage.ref(`bitacora/${orgId}/reports/${reportId}/${path.replace(/[^a-zA-Z0-9_-]/g,'_')}.jpg`);await ref.putString(data,'data_url',{contentType:'image/jpeg'});return {__bitacoraStoragePath:ref.fullPath};});}
-async function hydrateRecord(record){async function walk(v){if(Array.isArray(v)){const a=[];for(const x of v)a.push(await walk(x));return a;}if(v&&typeof v==='object'){if(v.__bitacoraStoragePath){const url=await storage.ref(v.__bitacoraStoragePath).getDownloadURL();const blob=await (await fetch(url)).blob();return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob)});}const o={};for(const [k,x] of Object.entries(v))o[k]=await walk(x);return o;}return v;}return walk(record);}
+async function hydrateRecord(record){
+ async function walk(v){
+  if(Array.isArray(v)){const a=[];for(const x of v)a.push(await walk(x));return a;}
+  if(v&&typeof v==='object'){
+   if(v.__bitacoraStoragePath){
+    const url=await storage.ref(v.__bitacoraStoragePath).getDownloadURL();
+    // Guardar solo la URL/ruta en caché; nunca convertir la foto a base64
+    // para evitar duplicar megabytes en localStorage al abrir publicaciones.
+    return {__bitacoraStoragePath:v.__bitacoraStoragePath,__bitacoraPhotoUrl:url};
+   }
+   const o={};for(const [k,x] of Object.entries(v))o[k]=await walk(x);return o;
+  }
+  return v;
+ }
+ return walk(record);
+}
 async function publish(publication){if(!user||!orgId||member?.status!=='active')throw new Error('Inicia sesión y conecta una organización.');const ref=db.collection('bitacoraOrganizations').doc(orgId).collection('reports').doc(publication.publishedId);const record=await uploadRecord(publication.record,publication.publishedId);await ref.set({sourceId:publication.sourceId,publisher:publication.publisher,uid:user.uid,record,publishedAt:firebase.firestore.FieldValue.serverTimestamp(),area:publication.record.area||'',type:publication.record.type||'',schemaVersion:5,status:'published'});}
-function queue(publication){const a=JSON.parse(localStorage.getItem(pendingKey)||'[]');if(!a.some(x=>x.publishedId===publication.publishedId))a.push(publication);localStorage.setItem(pendingKey,JSON.stringify(a));}
+function queue(publication){const a=JSON.parse(localStorage.getItem(pendingKey)||'[]');if(!a.some(x=>x.publishedId===publication.publishedId))a.push(publication);try{localStorage.setItem(pendingKey,JSON.stringify(a));}catch(e){throw new Error('El teléfono no tiene espacio local suficiente para conservar la publicación pendiente. Exporta un respaldo y libera espacio.');}}
 function markSynced(id){const a=JSON.parse(localStorage.getItem(pendingKey)||'[]').filter(x=>x.publishedId!==id);localStorage.setItem(pendingKey,JSON.stringify(a));}
 async function flushQueue(){if(!navigator.onLine||!user||member?.status!=='active')return;const a=JSON.parse(localStorage.getItem(pendingKey)||'[]');for(const p of a){try{await publish(p);markSynced(p.publishedId);}catch(e){console.warn('Publicación pendiente',p.publishedId,e);break;}}}
 window.addEventListener('online',flushQueue);

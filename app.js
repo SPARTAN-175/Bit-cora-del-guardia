@@ -411,8 +411,12 @@ function photoData(r){
  const out=[];
  const walk=(value,keyPath)=>{
    if(!value)return;
-   if(typeof value==="string" && value.startsWith("data:image/")){
+   if(typeof value==="string" && (value.startsWith("data:image/") || /^https:\/\//i.test(value))){
      out.push({key:keyPath,data:value});
+     return;
+   }
+   if(value && typeof value==="object" && typeof value.__bitacoraPhotoUrl==="string"){
+     out.push({key:keyPath,data:value.__bitacoraPhotoUrl});
      return;
    }
    if(Array.isArray(value)){
@@ -575,9 +579,29 @@ async function publishRecord(id){
  const r=records.find(x=>x.id===id); if(!r)return;
  if(publishedRecords.some(x=>x.sourceId===r.id && x.guard===r.guard))return toast("Este registro ya está publicado","info");
  const publication={sourceId:r.id,publishedId:crypto.randomUUID(),publishedAt:nowISO(),publisher:r.guard||guardName||"Sin configurar",record:cloneRecord(r),originDevice:localStorage.getItem("bitacora_device_id")||makeDeviceId(),relayed:false};
- publishedRecords.unshift(publication); localStorage.setItem(publishedKey,JSON.stringify(publishedRecords)); renderPublished();
- if(window.BitacoraCloud?.publish){try{await window.BitacoraCloud.publish(publication);window.BitacoraCloud.markSynced?.(publication.publishedId);toast("Publicación sincronizada con la organización");}catch(e){console.error("Firebase publish",e);window.BitacoraCloud.queue?.(publication);toast("Guardada localmente. Quedó pendiente de sincronización.","warning");}}
- else toast("Publicada localmente. Inicia sesión y conecta una organización para compartirla.","info");
+ if(window.BitacoraCloud?.publish){
+  try{
+   await window.BitacoraCloud.publish(publication);
+   window.BitacoraCloud.markSynced?.(publication.publishedId);
+   // No duplicar fotografías base64 en localStorage: la copia local del registro
+   // ya existe y la publicación remota se recupera desde Firestore/Storage.
+   toast("Publicación guardada en la nube ✓");
+  }catch(e){
+   console.error("Firebase publish",e);
+   try{window.BitacoraCloud.queue?.(publication);}catch(queueError){console.error("No se pudo encolar la publicación",queueError)}
+   const compact={...publication,record:{...publication.record,data:{...(publication.record.data||{})}}};
+   for(const [k,v] of Object.entries(compact.record.data))if(typeof v==="string"&&v.startsWith("data:image/"))delete compact.record.data[k];
+   publishedRecords.unshift(compact);
+   try{localStorage.setItem(publishedKey,JSON.stringify(publishedRecords));}catch(storageError){console.warn("No se pudo guardar caché local de publicaciones",storageError)}
+   renderPublished();
+   toast("No se confirmó la publicación en la nube. Quedó pendiente de sincronización.","warning");
+  }
+ }else{
+  publishedRecords.unshift(publication);
+  try{localStorage.setItem(publishedKey,JSON.stringify(publishedRecords));}catch(e){console.warn("Caché local llena",e)}
+  renderPublished();
+  toast("Publicada solo en este teléfono; inicia sesión para sincronizarla.","warning");
+ }
 }
 function makeDeviceId(){let id=localStorage.getItem("bitacora_device_id");if(!id){id=crypto.randomUUID();localStorage.setItem("bitacora_device_id",id)}return id;}
 
@@ -589,7 +613,13 @@ function reportHtml(list,title){
 }
 function downloadBlob(name,blob){const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
 function downloadPublishedOne(pid){const x=publishedRecords.find(p=>p.publishedId===pid);if(!x)return;downloadBlob(`registro_${x.record.id}.html`,new Blob([reportHtml([x],"Registro de guardia")],{type:"text/html;charset=utf-8"}));toast("Registro descargado")}
-function downloadPublishedGuard(){if(!publishedRecords.length)return toast("No hay publicaciones para descargar","warning");downloadBlob(`bitacora_guardia_publicada_${new Date().toISOString().slice(0,10)}.html`,new Blob([reportHtml(publishedRecords,"Bitácora de guardia publicada")],{type:"text/html;charset=utf-8"}));toast("📄 Registro de toda la guardia descargado")}
+function downloadPublishedGuard(){
+ const date=$("#dateFilter")?.value||selectedDate;
+ const list=publishedRecords.filter(x=>new Date(x.record?.createdAt||x.publishedAt).toLocaleDateString("en-CA")===date);
+ if(!list.length)return toast(`No hay publicaciones para ${date}`,"warning");
+ downloadBlob(`bitacora_publicada_${date}.html`,new Blob([reportHtml(list,`Bitácora publicada · ${date}`)],{type:"text/html;charset=utf-8"}));
+ toast(`📄 ${list.length} publicaciones exportadas`);
+}
 async function sharePublished(pid){const x=publishedRecords.find(p=>p.publishedId===pid);if(!x)return;await share(x.record)}
 async function sharePublishedPackage(pid){
  const x=publishedRecords.find(p=>p.publishedId===pid);if(!x)return;
@@ -690,13 +720,20 @@ $("#dateFilter").onchange=()=>{selectedDate=$("#dateFilter").value;$("#searchInp
 async function shareCurrentDay(){
  const date=$("#dateFilter")?.value||selectedDate;
  const dayRecords=records.filter(r=>new Date(r.createdAt).toLocaleDateString("en-CA")===date);
- if(!dayRecords.length)return toast("No hay registros para compartir de este día","warning");
- const guards=[...new Set(dayRecords.map(r=>r.guard||"Sin configurar"))];
- const text=["🏥 BITÁCORA DE GUARDIA",`📅 Día: ${date}`,`👮 Guardia(s): ${guards.join(", ")}`,`📍 Registros: ${dayRecords.length}`,"━━━━━━━━━━━━━━━━━━",...dayRecords.slice().reverse().map(shareText)].join("\n\n");
+ const dayPublished=publishedRecords.filter(x=>new Date(x.record?.createdAt||x.publishedAt).toLocaleDateString("en-CA")===date);
+ if(!dayRecords.length&&!dayPublished.length)return toast("No hay registros para compartir de este día","warning");
+ const guards=[...new Set([...dayRecords.map(r=>r.guard),...dayPublished.map(x=>x.record?.guard)].filter(Boolean))];
+ const text=["🏥 BITÁCORA DE GUARDIA",`📅 Día: ${date}`,`👮 Guardia(s): ${guards.join(", ")||"Sin configurar"}`,`📍 Registros locales: ${dayRecords.length}`,`📡 Publicaciones: ${dayPublished.length}`,"━━━━━━━━━━━━━━━━━━",...dayRecords.slice().reverse().map(shareText)].join("\n\n");
+ // El informe HTML reúne registros y fotografías para compartir como un solo archivo.
+ const combined=[...dayRecords.map(record=>({record})),...dayPublished.filter(p=>!dayRecords.some(r=>r.id===p.sourceId))];
+ const html=reportHtml(combined,`Bitácora de guardia · ${date}`);
+ const file=new File([html],`bitacora_guardia_${date}.html`,{type:"text/html"});
+ if(navigator.share&&navigator.canShare?.({files:[file]})){
+  try{await navigator.share({title:`Bitácora de guardia ${date}`,text,files:[file]});return}catch(e){if(e?.name==="AbortError")return;console.warn("Compartir informe",e)}
+ }
+ downloadBlob(file.name,file);
  if(await nativeShareText(`Bitácora ${date}`,text))return;
-  if(navigator.share){try{await navigator.share({title:`Bitácora ${date}`,text});return}catch(e){if(e?.name==="AbortError")return}}
- try{await navigator.clipboard?.writeText(text)}catch(_){}
- toast("Reporte del día copiado. Puedes pegarlo en WhatsApp.");
+ toast("Informe completo descargado; puedes adjuntarlo al compartir.","info");
 }
 function openDrawer(){
  pushView("drawer");$("#drawer").classList.add("open");$("#drawerBackdrop").classList.remove("hidden");$("#drawer").setAttribute("aria-hidden","false");
@@ -842,7 +879,10 @@ window.receiveCloudPublication=function(publication){
  if(!publication?.publishedId||!publication.record)return;
  const i=publishedRecords.findIndex(x=>x.publishedId===publication.publishedId);
  if(i>=0)publishedRecords[i]=publication;else publishedRecords.unshift(publication);
- try{localStorage.setItem(publishedKey,JSON.stringify(publishedRecords));renderPublished();}catch(e){console.warn("Cache publicaciones",e)}
+ // La interfaz debe actualizarse aunque el almacenamiento local esté lleno.
+ renderPublished();
+ try{localStorage.setItem(publishedKey,JSON.stringify(publishedRecords));}
+ catch(e){console.warn("Caché local de publicaciones llena; la copia en Firebase permanece intacta.",e)}
 };
 window.setCloudGuardName=function(name){guardName=String(name||"");if(guardName)localStorage.setItem(GUARD_KEY,guardName);setGuard();};
 function openImageViewer(src){if(!src)return;const v=$("#imageViewer"),img=$("#viewerImage"),a=$("#downloadViewerImage");img.src=src;a.href=src;v.classList.remove("hidden");}
