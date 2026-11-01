@@ -1,0 +1,32 @@
+BITÁCORA DEL GUARDIA — PARCHE v5.0.4
+
+OBJETIVO
+Permitir el uso local de la aplicación cuando no hay internet, sin bloquear al guardia en el inicio de sesión o en la pantalla para unirse a una organización.
+
+CAMBIOS
+- Si Firebase no está disponible por falta de internet, se oculta la pantalla de acceso/organización y se permite usar los reportes locales del teléfono.
+- Si la sesión de Firebase ya existe pero Firestore no responde al verificar la organización, se activa el modo local en vez de dejar al usuario atrapado en la pantalla del QR.
+- Se conserva en el teléfono una referencia mínima de la última organización y del nombre del guardia, para mantener el contexto visual sin consultar Firebase.
+- Al recuperar internet, la aplicación vuelve a comprobar la sesión y la pertenencia a la organización y reanuda la sincronización de las publicaciones que el usuario ya había solicitado.
+- Publicar sin internet no se confirma como publicación en la nube: queda pendiente en el teléfono para sincronizar cuando vuelva la conexión. Los reportes normales siguen siendo exclusivamente locales.
+- Si el administrador revocó el acceso mientras el teléfono estaba desconectado, la revocación se detectará al reconectar; mientras tanto, el modo offline permite únicamente el trabajo local.
+
+ARCHIVOS DEL PARCHE
+- firebase-cloud.js
+- index.html
+- sw.js
+- LEEME-v5.0.4.txt
+
+INSTALACIÓN
+1. Haz respaldo del repositorio.
+2. Reemplaza estos tres archivos en la raíz del proyecto de GitHub Pages.
+3. Publica los cambios.
+4. Cierra completamente la PWA y vuelve a abrirla. Si conserva la versión anterior, borra la caché del sitio o fuerza la actualización.
+
+NO SE MODIFICAN
+- app.js, estilos, manifest ni iconos.
+- Reglas de Firestore y Storage.
+- No se agregan funciones de Firebase ni servicios de pago.
+
+VALIDACIÓN
+Se verificó sintaxis JavaScript y referencias de versión. No se ha probado en el dispositivo real ni contra Firebase en vivo; probar primero en modo avión y luego al recuperar conexión.
