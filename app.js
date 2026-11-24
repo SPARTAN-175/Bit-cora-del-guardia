@@ -125,7 +125,7 @@ nota:{
 function fieldHTML(f){
  const [id,label,type,required,opts]=f;
  if(type==="textarea") return `<label class="full-col">${label}${required?" *":""}<textarea id="f_${id}" ${required?"required":""} placeholder="Escribe aquí…"></textarea></label>`;
- if(type==="photo") return `<div class="full-col photo-picker"><span class="field-label">${label}</span><div class="photo-buttons"><button type="button" class="secondary photo-action" id="cam_${id}">📷 Tomar foto</button><button type="button" class="secondary photo-action" id="gal_${id}">🖼️ Galería</button><button type="button" class="danger photo-action photo-clear" id="clear_${id}">✕ Quitar foto</button></div><input id="camfile_${id}" type="file" accept="image/*" capture="environment" hidden><input id="galfile_${id}" type="file" accept="image/*" hidden><div id="preview_${id}" class="photo-preview"></div><small class="photo-help">La foto puede incluir fecha/hora y ubicación si el dispositivo la proporciona. Si no hay conexión o ubicación, funciona normalmente.</small></div>`;
+ if(type==="photo") return `<div class="full-col photo-picker"><span class="field-label">${label}</span><div class="photo-buttons"><button type="button" class="secondary photo-action" id="cam_${id}">📷 Tomar foto</button><button type="button" class="secondary photo-action" id="gal_${id}">🖼️ Galería</button><button type="button" class="danger photo-action photo-clear" id="clear_${id}">✕ Quitar foto</button></div><input id="camfile_${id}" type="file" accept="image/*" capture="environment" hidden><input id="galfile_${id}" type="file" accept="image/*" multiple hidden><div id="preview_${id}" class="photo-preview"></div><small class="photo-help">La foto puede incluir fecha/hora y ubicación si el dispositivo la proporciona. Si no hay conexión o ubicación, funciona normalmente.</small></div>`;
  if(type==="patientList") return `<div class="full-col repeat-section"><div class="repeat-head"><div><span class="field-label">👤 ${label}${required?" *":""}</span><small class="photo-help">Agrega todos los pacientes sin mezclar sus datos.</small></div><button type="button" class="secondary add-repeat" id="addPatientBtn">＋ Agregar paciente</button></div><div id="patientsList"></div></div>`;
  if(type==="companionList") return `<div class="full-col repeat-section"><div class="repeat-head"><div><span class="field-label">👥 ${label}</span><small class="photo-help">Cada acompañante queda relacionado con un paciente.</small></div><button type="button" class="secondary add-repeat" id="addCompanionBtn">＋ Agregar acompañante</button></div><div id="companionsList"></div></div>`;
  if(type==="timeToggle") return `<div class="time-toggle-wrap"><span class="field-label">${label}</span><input id="f_${id}" type="hidden" value=""><input id="picker_${id}" type="datetime-local" hidden><button type="button" class="secondary time-toggle" id="time_${id}" data-field="${id}">🕐 Establecer fecha y hora</button><small id="time_help_${id}" class="photo-help">Toca para establecer la fecha y hora de salida. Si ya está registrada, toca para quitarla.</small></div>`;
@@ -226,13 +226,14 @@ function setupPhotoPickers(fields, resetState=true){
  if(resetState){photoFiles={};photoCleared={};}
  fields.filter(([id,,ft])=>ft==="photo").forEach(([id])=>{
   const camBtn=$("#cam_"+id),galBtn=$("#gal_"+id),clearBtn=$("#clear_"+id),cam=$("#camfile_"+id),gal=$("#galfile_"+id),preview=$("#preview_"+id);
-  const choose=file=>{if(!file)return;photoFiles[id]=file;photoCleared[id]=false;preview.innerHTML="";const img=document.createElement("img");img.src=URL.createObjectURL(file);img.alt="Vista previa de evidencia";img.addEventListener("click",()=>openImageViewer(img.src));preview.appendChild(img);};
+  const renderGrid=(items)=>{preview.innerHTML="";preview.classList.toggle("photo-grid",items.length>1);items.slice(0,4).forEach((item,index)=>{const src=item instanceof File?URL.createObjectURL(item):item;const cell=document.createElement("button");cell.type="button";cell.className="photo-grid-item";const img=document.createElement("img");img.src=src;img.alt=`Evidencia ${index+1}`;cell.appendChild(img);if(index===3&&items.length>4){const more=document.createElement("span");more.className="photo-grid-more";more.textContent=`+${items.length-4}`;cell.appendChild(more);}cell.onclick=()=>openImageViewer(src);preview.appendChild(cell);});const count=document.createElement("small");count.className="photo-count";count.textContent=`${items.length} fotografía${items.length===1?"":"s"} seleccionada${items.length===1?"":"s"}`;preview.appendChild(count);};
+  const chooseFiles=files=>{const selected=Array.from(files||[]).filter(f=>f.type.startsWith("image/"));if(!selected.length)return;photoFiles[id]=selected;photoCleared[id]=false;renderGrid(selected);gal.value="";};
   const saveCapturedPhoto=file=>{try{const url=URL.createObjectURL(file),a=document.createElement("a");a.href=url;a.download=`evidencia_bitacora_${Date.now()}.jpg`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);}catch(e){console.warn("No se pudo descargar la foto",e)}};
   camBtn.onclick=async()=>{const f=await nativePhoto("camera"); if(f){choose(f);saveCapturedPhoto(f);return} cam.click()};
-  galBtn.onclick=async()=>{const f=await nativePhoto("photos"); if(f){choose(f);return} gal.click()};
-  const clear=()=>{photoFiles[id]=null;photoCleared[id]=true;cam.value="";gal.value="";preview.innerHTML="";};
+  galBtn.onclick=()=>gal.click();
+  const clear=()=>{photoFiles[id]=[];photoCleared[id]=true;cam.value="";gal.value="";preview.innerHTML="";};
   clearBtn.onclick=clear;
-  cam.onchange=e=>{const f=e.target.files?.[0];choose(f);if(f)saveCapturedPhoto(f)}; gal.onchange=e=>choose(e.target.files?.[0]);
+  cam.onchange=e=>{const f=e.target.files?.[0];if(f){chooseFiles([f]);saveCapturedPhoto(f)}cam.value=""}; gal.onchange=e=>chooseFiles(e.target.files);
  });
 }
 
@@ -334,7 +335,7 @@ $("#recordForm").onsubmit=async e=>{
    if(fieldType==="patientList"||fieldType==="companionList")continue;
    const el=$("#f_"+id);
    if(fieldType==="photo"){
-     if(photoFiles[id]) data[id]=await compressImage(photoFiles[id]);
+     if(Array.isArray(photoFiles[id])&&photoFiles[id].length) data[id]=await Promise.all(photoFiles[id].map(compressImage));
      else if(editingRecordId){const old=records.find(x=>x.id===editingRecordId);if(old?.data?.[id]&&!photoCleared[id])data[id]=old.data[id];}
    } else data[id]=el?.value?.trim()||"";
  }
@@ -741,7 +742,7 @@ window.editById=id=>{
   if(b&&v){$("#f_horaSalidaAmb").value=v;if(p&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v))p.value=v;b.textContent=`🕐 ${/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)?new Intl.DateTimeFormat("es-MX",{dateStyle:"short",timeStyle:"short",hour12:false}).format(new Date(v)):v}`;}
 }
 
- forms[r.type].fields.forEach(([k,,ft])=>{if(ft==="photo"&&r.data[k]){const preview=$("#preview_"+k);if(preview)preview.innerHTML=`<img src="${r.data[k]}" alt="Foto guardada">`}});
+ forms[r.type].fields.forEach(([k,,ft])=>{if(ft==="photo"&&r.data[k]){const preview=$("#preview_"+k);if(preview){const saved=Array.isArray(r.data[k])?r.data[k]:[r.data[k]];preview.innerHTML="";preview.classList.toggle("photo-grid",saved.length>1);saved.slice(0,4).forEach((src,i)=>{const cell=document.createElement("button");cell.type="button";cell.className="photo-grid-item";const img=document.createElement("img");img.src=src;img.alt=`Foto guardada ${i+1}`;cell.appendChild(img);if(i===3&&saved.length>4){const more=document.createElement("span");more.className="photo-grid-more";more.textContent=`+${saved.length-4}`;cell.appendChild(more);}cell.onclick=()=>openImageViewer(src);preview.appendChild(cell)});const count=document.createElement("small");count.className="photo-count";count.textContent=`${saved.length} fotografía${saved.length===1?"":"s"} guardada${saved.length===1?"":"s"}`;preview.appendChild(count);}}});
 };
 
 $("#searchInput").oninput=render;
