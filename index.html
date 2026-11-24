@@ -139,7 +139,7 @@
 </div>
 
 <div id="recordPreviewModal" class="modal hidden" aria-hidden="true"><div class="modal-card preview-card"><div class="modal-head"><div><span class="eyebrow">DETALLE DEL REGISTRO</span><h2 id="recordPreviewTitle">Registro</h2></div><button class="close" onclick="document.getElementById('recordPreviewModal').classList.add('hidden')">×</button></div><p id="recordPreviewMeta" class="muted"></p><div id="recordPreviewPhotos" class="record-preview-photos"></div><pre id="recordPreviewText" class="published-detail-text"></pre><div class="form-actions"><button class="secondary" onclick="document.getElementById('recordPreviewModal').classList.add('hidden')">Cerrar</button><button class="primary" onclick="editById(document.getElementById('recordPreviewModal').dataset.recordId)">✏️ Editar</button></div></div></div>
-<div id="photoLightbox" class="photo-lightbox hidden" aria-hidden="true" onclick="closePhotoLightbox()"><button class="photo-lightbox-close" aria-label="Cerrar">×</button><img id="photoLightboxImg" alt="Fotografía ampliada"><p id="photoLightboxCaption"></p></div>
+<div id="photoLightbox" class="photo-lightbox hidden" aria-hidden="true" onclick="closePhotoLightbox()"><button class="photo-lightbox-close" aria-label="Cerrar" onclick="event.stopPropagation();closePhotoLightbox()">×</button><button id="photoLightboxPrev" class="photo-lightbox-nav prev" aria-label="Fotografía anterior" onclick="event.stopPropagation();movePhotoViewer(-1)">‹</button><img id="photoLightboxImg" alt="Fotografía ampliada" onclick="event.stopPropagation()"><button id="photoLightboxNext" class="photo-lightbox-nav next" aria-label="Fotografía siguiente" onclick="event.stopPropagation();movePhotoViewer(1)">›</button><p id="photoLightboxCaption" onclick="event.stopPropagation()"></p></div>
 
 <div id="publishedDetailModal" class="modal hidden" aria-hidden="true">
   <div class="modal-card">
@@ -182,6 +182,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="app.js?v=5.0.4"></script><script src="firebase-cloud.js?v=5.0.4"></script>
+<script src="app.js?v=5.0.7"></script><script src="firebase-cloud.js?v=5.0.4"></script>
 </body>
 </html>

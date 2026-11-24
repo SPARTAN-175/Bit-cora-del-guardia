@@ -382,6 +382,53 @@ function getPhotoLocation(){
    navigator.geolocation.getCurrentPosition(formatPosition,fallback,{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
  });
 }
+async function readPhotoExif(file){
+ // Lee EXIF directamente del archivo original, antes de dibujarlo en canvas
+ // (el canvas elimina los metadatos). Solo procesa JPEG con segmento EXIF.
+ try{
+  if(!file || !/^image\/(jpeg|jpg)$/i.test(file.type))return null;
+  const buffer=await file.arrayBuffer(),view=new DataView(buffer);
+  if(view.byteLength<4||view.getUint16(0)!==0xFFD8)return null;
+  let offset=2,tiff=0,little=false;
+  while(offset+4<view.byteLength){
+   if(view.getUint8(offset)!==0xFF)break;
+   const marker=view.getUint8(offset+1),length=view.getUint16(offset+2);
+   if(marker===0xE1 && offset+10<view.byteLength && view.getUint32(offset+4)===0x45786966){tiff=offset+10;break;}
+   if(length<2)break;offset+=2+length;
+  }
+  if(!tiff)return null;
+  const order=view.getUint16(tiff);little=order===0x4949;if(!little&&order!==0x4D4D)return null;
+  const u16=o=>view.getUint16(o,little),u32=o=>view.getUint32(o,little);
+  if(u16(tiff+2)!==42)return null;
+  const readIfd=(relative)=>{
+   const start=tiff+relative;if(start<0||start+2>view.byteLength)return {};
+   const count=u16(start),out={};
+   for(let i=0;i<count;i++){
+    const e=start+2+i*12;if(e+12>view.byteLength)break;
+    const tag=u16(e),type=u16(e+2),n=u32(e+4);let valueOffset=e+8;
+    const sizes={1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8};const size=(sizes[type]||0)*n;
+    if(size>4)valueOffset=tiff+u32(e+8);
+    if(valueOffset<0||valueOffset+Math.min(size,1024)>view.byteLength)continue;
+    if(type===2){let str='';for(let j=0;j<n&&j<128;j++){const c=view.getUint8(valueOffset+j);if(!c)break;str+=String.fromCharCode(c);}out[tag]=str.trim();}
+    else if(type===3)out[tag]=n===1?u16(valueOffset):Array.from({length:Math.min(n,16)},(_,j)=>u16(valueOffset+j*2));
+    else if(type===4)out[tag]=n===1?u32(valueOffset):Array.from({length:Math.min(n,16)},(_,j)=>u32(valueOffset+j*4));
+    else if(type===5||type===10){const rational=pos=>{const a=u32(pos),b=u32(pos+4);return b?a/b:0};out[tag]=n===1?rational(valueOffset):Array.from({length:Math.min(n,8)},(_,j)=>rational(valueOffset+j*8));}
+   }
+   return out;
+  };
+  const ifd0=readIfd(u32(tiff+4));let exif={},gps={};
+  if(typeof ifd0[0x8769]==='number')exif=readIfd(ifd0[0x8769]);
+  if(typeof ifd0[0x8825]==='number')gps=readIfd(ifd0[0x8825]);
+  const rawDate=exif[0x9003]||ifd0[0x0132]||'';
+  let capturedAt='';
+  const m=String(rawDate).match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if(m){const d=new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);if(!Number.isNaN(d.getTime()))capturedAt=d.toISOString();}
+  const dms=arr=>Array.isArray(arr)&&arr.length>=3?Number(arr[0])+Number(arr[1])/60+Number(arr[2])/3600:null;
+  let gpsText='';const lat=dms(gps[2]),lon=dms(gps[4]);
+  if(lat!==null&&lon!==null&&gps[1]&&gps[3])gpsText=`${gps[1]==='S'?-lat:lat}, ${gps[3]==='W'?-lon:lon}`;
+  return capturedAt||gpsText?{capturedAt,gps:gpsText}:null;
+ }catch(e){console.warn('No se pudieron leer metadatos EXIF',e);return null;}
+}
 function compressImage(file){
  // La evidencia se comprime ANTES de guardarse en el teléfono y antes de publicarse.
  // Así los reportes locales ocupan menos espacio y Firebase recibe exactamente
@@ -391,6 +438,7 @@ function compressImage(file){
      const reader=new FileReader();
      reader.onload=async()=>{
        try{
+         const exif=await readPhotoExif(file);
          const img=new Image();
          img.onload=async()=>{
            const max=720, scale=Math.min(1,max/Math.max(img.width,img.height));
@@ -399,12 +447,15 @@ function compressImage(file){
            const ctx=c.getContext("2d");ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";
            ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
            ctx.drawImage(img,0,0,photoW,photoH);
-           const location=await getPhotoLocation();
-           const when=new Date();
+           const currentLocation=await getPhotoLocation();
+           const when=exif?.capturedAt?new Date(exif.capturedAt):new Date();
+           const location=exif?.gps||currentLocation;
+           const dateLabel=exif?.capturedAt?"Capturada":"Incorporada";
+           const gpsLabel=exif?.gps?"GPS de captura":(currentLocation?"Ubicación al incorporar":"GPS no disponible");
            ctx.fillStyle="#fff";ctx.fillRect(0,photoH,c.width,footer);
            ctx.fillStyle="#111";ctx.font="bold 14px Arial";ctx.fillText("Bitácora de Guardia",12,photoH+19);
-           ctx.font="11px Arial";ctx.fillText(`Fecha/hora: ${fmt(when)}`,12,photoH+37);
-           const gps=location?`GPS: ${location}`:"GPS: no disponible";
+           ctx.font="11px Arial";ctx.fillText(`${dateLabel}: ${fmt(when)}`,12,photoH+37);
+           const gps=location?`${gpsLabel}: ${location}`:gpsLabel;
            ctx.fillText(gps.slice(0,100),12,photoH+53);
            resolve(c.toDataURL("image/jpeg",.43));
          };
@@ -633,7 +684,10 @@ function showPhotoLightbox(src,caption="Evidencia"){
  const modal=$("#photoLightbox"),img=$("#photoLightboxImg"),cap=$("#photoLightboxCaption");
  if(!modal||!img)return;img.src=src;cap.textContent=caption;modal.classList.remove("hidden");modal.setAttribute("aria-hidden","false");
 }
-function closePhotoLightbox(){const m=$("#photoLightbox");if(!m)return;m.classList.add("hidden");m.setAttribute("aria-hidden","true");$("#photoLightboxImg").src="";}
+function closePhotoLightbox(){const m=$("#photoLightbox");if(!m)return;m.classList.add("hidden");m.setAttribute("aria-hidden","true");$("#photoLightboxImg").src="";activePhotoSet=[];}
+const photoViewer=$('#photoLightbox');
+photoViewer?.addEventListener('touchstart',e=>{photoTouchStartX=e.changedTouches[0]?.clientX||0;},{passive:true});
+photoViewer?.addEventListener('touchend',e=>{const dx=(e.changedTouches[0]?.clientX||0)-photoTouchStartX;if(Math.abs(dx)>45)movePhotoViewer(dx<0?1:-1);},{passive:true});
 function showRecordPreview(r){const photos=photoData(r);const title=typeName(r.type);const html=photos.map((p,i)=>`<figure class="record-preview-photo"><img src="${p.data}" alt="Evidencia ${i+1}" onclick="showPhotoLightbox(this.src,'${esc(p.key||`Evidencia ${i+1}`)}')"><figcaption>${esc(p.key||`Evidencia ${i+1}`)}</figcaption></figure>`).join("");
  const modal=$("#recordPreviewModal");if(!modal)return;$("#recordPreviewTitle").textContent=title;$("#recordPreviewMeta").textContent=`${fmt(r.createdAt)} · ${r.area||""} · Guardia: ${r.guard||"Sin configurar"}`;$("#recordPreviewPhotos").innerHTML=html;$("#recordPreviewText").textContent=shareText(r);modal.dataset.recordId=r.id;modal.classList.remove("hidden");}
 window.showPhotoLightbox=showPhotoLightbox;
@@ -655,9 +709,16 @@ async function deleteRecord(id){
 }
 function recordGalleryHTML(r){
  const photos=photoData(r);if(!photos.length)return '';
- if(photos.length===1){const p=photos[0];return `<div class="record-gallery single"><img class="record-large-photo" src="${p.data}" alt="Evidencia" loading="lazy" onclick="showPhotoLightbox(this.src,'${esc(p.key||'Evidencia')}')"><small>${esc(p.key||'Foto')} · Toca para ampliar</small></div>`;}
- return `<div class="record-gallery whatsapp-gallery">${photos.slice(0,4).map((p,i)=>`<button type="button" class="record-gallery-item" onclick="showPhotoLightbox(this.querySelector('img').src,'${esc(p.key||`Evidencia ${i+1}`)}')"><img src="${p.data}" alt="Evidencia ${i+1}" loading="lazy">${i===3&&photos.length>4?`<span class="record-gallery-more">+${photos.length-4}</span>`:''}</button>`).join('')}</div><small class="record-gallery-count">${photos.length} fotografías · Toca para ampliar</small>`;
+ if(photos.length===1){const p=photos[0];return `<div class="record-gallery single"><img class="record-large-photo" src="${p.data}" alt="Evidencia" loading="lazy" onclick="openRecordPhotoViewer('${r.id}',0)"><small>${esc(p.key||'Evidencia')} · Toca para ampliar</small></div>`;}
+ return `<div class="record-gallery whatsapp-gallery">${photos.slice(0,4).map((p,i)=>`<button type="button" class="record-gallery-item" onclick="openRecordPhotoViewer('${r.id}',${i})"><img src="${p.data}" alt="Evidencia ${i+1}" loading="lazy">${i===3&&photos.length>4?`<span class="record-gallery-more">+${photos.length-4}</span>`:''}</button>`).join('')}</div><small class="record-gallery-count">${photos.length} fotografías · Toca para ampliar y desliza para recorrerlas</small>`;
 }
+let activePhotoSet=[],activePhotoIndex=0,photoTouchStartX=0;
+function openRecordPhotoViewer(recordId,index=0){const r=records.find(x=>x.id===recordId)||publishedRecords.find(x=>x.record?.id===recordId)?.record;if(!r)return;activePhotoSet=photoData(r);activePhotoIndex=Math.max(0,Math.min(index,activePhotoSet.length-1));renderPhotoViewer();}
+function renderPhotoViewer(){const modal=$('#photoLightbox');if(!modal||!activePhotoSet.length)return;const p=activePhotoSet[activePhotoIndex];$('#photoLightboxImg').src=p.data;$('#photoLightboxCaption').textContent=`${p.key||'Evidencia'} · ${activePhotoIndex+1} de ${activePhotoSet.length}`;$('#photoLightboxPrev').disabled=activePhotoIndex===0;$('#photoLightboxNext').disabled=activePhotoIndex===activePhotoSet.length-1;modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');}
+function movePhotoViewer(delta){if(!activePhotoSet.length)return;const next=activePhotoIndex+delta;if(next<0||next>=activePhotoSet.length)return;activePhotoIndex=next;renderPhotoViewer();}
+window.openRecordPhotoViewer=openRecordPhotoViewer;
+window.movePhotoViewer=movePhotoViewer;
+
 function render(){
  const q=($("#searchInput")?.value||"").toLowerCase();
  const date=$("#dateFilter")?.value||selectedDate;

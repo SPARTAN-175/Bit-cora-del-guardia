@@ -1,0 +1,16 @@
+BITÁCORA DEL GUARDIA — ACTUALIZACIÓN v5.0.7
+
+CAMBIOS
+- Antes de comprimir cada fotografía JPEG, la PWA intenta leer EXIF del archivo original.
+- Si existe DateTimeOriginal, la imagen muestra “Capturada” con esa fecha/hora.
+- Si existe GPS EXIF, muestra esas coordenadas como “GPS de captura”.
+- Si los metadatos no existen, usa la fecha/hora de incorporación y, si está disponible, la ubicación del teléfono en ese momento, identificándolas claramente como datos de incorporación.
+- Se conserva el flujo de compresión y guardado local/publicación existente; no se modificó Firebase ni sus reglas.
+- La galería del registro abre un visor con botones anterior/siguiente y navegación por deslizamiento.
+- Se actualizó el caché del Service Worker para que los teléfonos reciban los archivos nuevos.
+
+NOTAS IMPORTANTES
+- La lectura EXIF se realiza en la PWA, sin instalar librerías ni depender de internet.
+- El soporte EXIF de esta versión está enfocado en fotografías JPEG. Si una imagen fue enviada por WhatsApp/redes, editada o capturada con una app que elimina metadatos, puede no conservar fecha/GPS originales.
+- EXIF normalmente no incluye zona horaria; la fecha se interpreta como hora local del dispositivo.
+- No se alteraron reglas, configuración ni datos de Firebase.
