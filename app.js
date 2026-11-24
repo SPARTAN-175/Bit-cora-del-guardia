@@ -490,90 +490,61 @@ function shareText(r){
 async function makeShareImage(r){
  const photos=Array.isArray(r)?r:photoData(r);
  if(!photos.length)return null;
-
- // Una sola foto: conservarla como fotografía normal, sin volver a dibujarla.
- if(photos.length===1){
-   const response=await fetch(photos[0].data);
-   return await response.blob();
- }
-
- // Varias fotos: unir TODAS en una sola imagen tipo cuadrícula para que
- // Android/WhatsApp reciba un único archivo sin perder las fotos anidadas
- // de pacientes y acompañantes.
+ if(photos.length===1){const response=await fetch(photos[0].data);return await response.blob();}
+ // Lámina de respaldo con tamaño limitado para evitar canvas gigantes en Android.
+ const maxW=1200,gap=12,cols=2,cellW=(maxW-gap)/2,thumbH=700;
  const imgs=await Promise.all(photos.map(p=>new Promise((resolve,reject)=>{
-   const img=new Image();
-   img.onload=()=>resolve(img);
-   img.onerror=reject;
-   img.src=p.data;
+  const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('No se pudo leer una fotografía'));img.src=p.data;
  })));
-
- const maxW=1000,gap=14,cols=imgs.length===2?2:2;
- const cellW=Math.floor((maxW-gap*(cols-1))/cols);
- const sizes=imgs.map(img=>{
-   const scale=Math.min(1,cellW/img.width);
-   return {w:Math.round(img.width*scale),h:Math.round(img.height*scale)};
- });
- const rows=Math.ceil(imgs.length/cols);
- const rowHeights=[];
- for(let row=0;row<rows;row++)rowHeights.push(Math.max(...sizes.slice(row*cols,row*cols+cols).map(x=>x.h)));
- const width=maxW;
- const height=rowHeights.reduce((sum,x)=>sum+x.h,0)+gap*(rows-1);
- const canvas=document.createElement("canvas");
- canvas.width=width;canvas.height=height;
- const ctx=canvas.getContext("2d");
- ctx.fillStyle="#fff";ctx.fillRect(0,0,width,height);
- let y=0;
- imgs.forEach((img,i)=>{
-   const z=sizes[i],col=i%cols,row=Math.floor(i/cols);
-   const x=Math.round(col*(cellW+gap)+(cellW-z.w)/2);
-   const yy=y+Math.round((rowHeights[row]-z.h)/2);
-   ctx.drawImage(img,x,yy,z.w,z.h);
-   if(col===cols-1 || i===imgs.length-1)y+=rowHeights[row]+gap;
- });
- return new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.82));
+ const rows=Math.ceil(imgs.length/cols),rowH= Math.min(thumbH,cellW);
+ const canvas=document.createElement('canvas');canvas.width=maxW;canvas.height=rows*rowH+(rows-1)*gap;
+ const ctx=canvas.getContext('2d');if(!ctx)throw new Error('No se pudo crear la imagen para compartir');
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+ imgs.forEach((img,i)=>{const col=i%cols,row=Math.floor(i/cols),x=col*(cellW+gap),y=row*(rowH+gap);const scale=Math.max(cellW/img.width,rowH/img.height),sw=cellW/scale,sh=rowH/scale,sx=(img.width-sw)/2,sy=(img.height-sh)/2;ctx.drawImage(img,sx,sy,sw,sh,x,y,cellW,rowH)});
+ return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('No se pudo generar la imagen')), 'image/jpeg',.78));
 }
 async function blobToBase64(blob){
  return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]||'');reader.onerror=reject;reader.readAsDataURL(blob);});
 }
 async function nativeShareFiles(title,text,photos,namePrefix){
  try{
-  // COSTA: Android comparte desde MediaStore usando content:// + EXTRA_STREAM.
-  // Una foto se conserva; varias evidencias se reúnen en una sola lámina para WhatsApp.
-  let blob;
-  if(photos.length===1){const response=await fetch(photos[0].data);blob=await response.blob();}
-  else blob=await makeShareImage(photos);
-  if(!blob)throw new Error('No se pudo preparar la imagen');
-  const base64=await blobToBase64(blob);
-
-  if(window.BitacoraNative && typeof window.BitacoraNative.shareImage==='function'){
-   window.BitacoraNative.shareImage(base64,`${namePrefix}.jpg`,title,text);
-   return true;
-  }
-
-  // PWA/navegadores y otros entornos: conservar el flujo anterior como alternativa.
+  // Capacitor Share admite una lista de archivos; se adjuntan las fotos por separado.
   const share=NativeShare(),fs=NativeFS();
   if(share&&fs){
-   const path=`bitacora-share/${namePrefix}.jpg`;
-   const result=await fs.writeFile({path,data:base64,directory:'CACHE',encoding:'base64',recursive:true});
-   const uri=result?.uri;
-   if(!uri)throw new Error('Android no devolvió la ruta del adjunto');
-   await share.share({title,text,files:[uri],dialogTitle:'Compartir incidencia con evidencia'});
+   const uris=[];
+   for(let i=0;i<photos.length;i++){
+    const response=await fetch(photos[i].data);const blob=await response.blob();
+    const base64=await blobToBase64(blob);
+    const result=await fs.writeFile({path:`${namePrefix}_${i+1}.jpg`,data:base64,directory:'CACHE',encoding:'base64',recursive:true});
+    if(!result?.uri)throw new Error('Android no devolvió la ruta de una fotografía');
+    uris.push(result.uri);
+   }
+   await share.share({title,text,files:uris,dialogTitle:'Compartir incidencia con evidencia'});
    return true;
   }
+  // Android Chrome/PWA: compartir varias imágenes reales en un solo envío.
+  if(navigator.share){
+   const files=[];
+   for(let i=0;i<photos.length;i++){
+    const response=await fetch(photos[i].data);const blob=await response.blob();
+    files.push(new File([blob],`${namePrefix}_${i+1}.jpg`,{type:blob.type||'image/jpeg'}));
+   }
+   if(navigator.canShare?.({files})){await navigator.share({title,text,files});return true;}
+  }
   return false;
- }catch(e){if(e?.message&&/cancel/i.test(e.message))return true;console.warn('Native share image',e);return false}
+ }catch(e){if(e?.name==='AbortError'||(e?.message&&/cancel/i.test(e.message)))return true;console.warn('Compartir evidencia múltiple',e);return false}
 }
 async function nativeShareText(title,text){const share=NativeShare();if(!share)return false;try{await share.share({title,text});return true}catch(e){if(e?.message&&/cancel/i.test(e.message))return true;return false}}
 async function share(r){
  const text=shareText(r),photos=photoData(r);
  if(photos.length){
   if(await nativeShareFiles('Bitácora de guardia',text,photos,`registro_${r.id}`))return;
-  // Web Share de archivos es el segundo intento; nunca degradar silenciosamente a texto solamente.
+  // Último recurso: una lámina optimizada y acotada, sin intentar adjuntar texto solamente.
   try{
-   const blob=photos.length===1?await (await fetch(photos[0].data)).blob():await makeShareImage(photos);
+   const blob=await makeShareImage(photos);
    if(blob){const file=new File([blob],`registro_${r.id}.jpg`,{type:'image/jpeg'});if(navigator.canShare?.({files:[file]})&&navigator.share){await navigator.share({title:'Bitácora de guardia',text,files:[file]});return;}}
   }catch(e){if(e?.name==='AbortError')return;console.warn('Web share image',e)}
-  toast(`No se pudo adjuntar la evidencia (${photos.length} foto${photos.length===1?'':'s'}). No se compartió solo el texto.`, 'error');
+  toast(`No se pudieron adjuntar las ${photos.length} fotografías. Comprueba que el navegador permita compartir archivos.`, 'error');
   return;
  }
  if(await nativeShareText('Bitácora de guardia',text))return;
@@ -682,6 +653,11 @@ async function deleteRecord(id){
   records=records.filter(x=>x.id!==id);save();renderPublished();toast("Registro eliminado"+(linked.length?" también de Firebase y Storage":" del dispositivo"));
  }catch(e){console.error(e);toast("No se pudo eliminar de la nube: "+(e.message||e),"error");}
 }
+function recordGalleryHTML(r){
+ const photos=photoData(r);if(!photos.length)return '';
+ if(photos.length===1){const p=photos[0];return `<div class="record-gallery single"><img class="record-large-photo" src="${p.data}" alt="Evidencia" loading="lazy" onclick="showPhotoLightbox(this.src,'${esc(p.key||'Evidencia')}')"><small>${esc(p.key||'Foto')} · Toca para ampliar</small></div>`;}
+ return `<div class="record-gallery whatsapp-gallery">${photos.slice(0,4).map((p,i)=>`<button type="button" class="record-gallery-item" onclick="showPhotoLightbox(this.querySelector('img').src,'${esc(p.key||`Evidencia ${i+1}`)}')"><img src="${p.data}" alt="Evidencia ${i+1}" loading="lazy">${i===3&&photos.length>4?`<span class="record-gallery-more">+${photos.length-4}</span>`:''}</button>`).join('')}</div><small class="record-gallery-count">${photos.length} fotografías · Toca para ampliar</small>`;
+}
 function render(){
  const q=($("#searchInput")?.value||"").toLowerCase();
  const date=$("#dateFilter")?.value||selectedDate;
@@ -710,7 +686,7 @@ function render(){
    ? `<button class="return-status time-corner-btn" title="Toca para borrar la hora y volver a registrarla" onclick="event.stopPropagation();toggleCardTime('${r.id}','salidaAt','hora de salida')">↗️ ${esc(fmtTime(r.salidaAt))}</button>`
    : `<button class="return-btn" title="Registrar salida" onclick="event.stopPropagation();toggleCardTime('${r.id}','salidaAt','hora de salida')">↗</button>`) : ""}
  </div>
- ${photoData(r).length?`<div class="record-gallery">${photoData(r).map((p,i)=>`<img class="record-large-photo" src="${p.data}" alt="Evidencia ${i+1}" loading="lazy" onclick="showPhotoLightbox(this.src,'${esc(p.key||`Evidencia ${i+1}`)}')"><small>${esc(p.key||`Evidencia ${i+1}`)} · Toca para ampliar</small>`).join("")}</div>`:""}
+ ${recordGalleryHTML(r)}
  <div class="record-summary record-note">${esc(summary(r))}</div>
  <div class="record-actions">
   <button onclick="event.stopPropagation();shareById('${r.id}')">📤 Compartir</button>

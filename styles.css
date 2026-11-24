@@ -174,3 +174,10 @@ body{background:linear-gradient(180deg,#eaf0f6 0,#f4f6f9 240px);color:var(--text
 .photo-grid-item img{width:100%;height:100%;max-width:none;max-height:none;object-fit:cover;border:0;border-radius:0}
 .photo-grid-more{position:absolute;inset:0;display:grid;place-items:center;background:#07111eaa;color:#fff;font-size:27px;font-weight:850}
 .photo-count{grid-column:1/-1;color:var(--muted);font-size:11px;padding-top:2px}
+
+/* v5.0.6: galería persistente tipo WhatsApp en las tarjetas de registro */
+.record-gallery.whatsapp-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;width:min(100%,420px);margin:12px 0 4px}
+.record-gallery-item{position:relative;display:block;min-width:0;width:100%;aspect-ratio:1/1;padding:0;border:0;border-radius:10px;overflow:hidden;background:#e8edf3;cursor:zoom-in}
+.record-gallery-item img{display:block;width:100%;height:100%;object-fit:cover}
+.record-gallery-more{position:absolute;inset:0;display:grid;place-items:center;background:#07111eaa;color:#fff;font-size:clamp(24px,7vw,38px);font-weight:850}
+.record-gallery-count{display:block;color:var(--muted,#64748b);font-size:.78rem;padding:0 3px;margin-bottom:8px}
